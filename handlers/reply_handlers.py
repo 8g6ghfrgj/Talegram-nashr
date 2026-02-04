@@ -677,3 +677,171 @@ class ReplyHandlers:
             await query.edit_message_text("⏹️ تم إيقاف الرد في الخاص!")
         else:
             await query.edit_message_text("⚠️ الرد في الخاص غير نشط!")
+    
+    async def start_group_reply(self, query, context):
+        """بدء الرد التلقائي في القروبات"""
+        admin_id = query.from_user.id
+        
+        accounts = self.db.get_active_publishing_accounts(admin_id)
+        if not accounts:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_group_replies")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد حسابات نشطة!",
+                reply_markup=reply_markup
+            )
+            return
+        
+        text_replies = self.db.get_group_text_replies(admin_id)
+        photo_replies = self.db.get_group_photo_replies(admin_id)
+        
+        if not text_replies and not photo_replies:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_group_replies")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد ردود مضافة!",
+                reply_markup=reply_markup
+            )
+            return
+        
+        if self.manager.start_group_reply(admin_id):
+            keyboard = [[InlineKeyboardButton("⏹️ إيقاف الرد", callback_data="stop_group_reply")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "👥 **تم بدء الرد في القروبات بأقصى سرعة!**\n\n"
+                f"✅ **عدد الحسابات:** {len(accounts)}\n"
+                f"✅ **عدد الردود النصية:** {len(text_replies)}\n"
+                f"✅ **عدد الردود مع الصور:** {len(photo_replies)}\n"
+                f"⚡ **بين الردود:** 0.05 ثانية\n"
+                f"⚡ **بين الدورات:** 3 ثواني\n\n"
+                "سيبدأ البوت بالرد على الرسائل في القروبات الآن بأقصى سرعة ممكنة.",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⚠️ الرد في القروبات يعمل بالفعل!")
+    
+    async def stop_group_reply(self, query, context):
+        """إيقاف الرد التلقائي في القروبات"""
+        admin_id = query.from_user.id
+        
+        if self.manager.stop_group_reply(admin_id):
+            await query.edit_message_text("⏹️ تم إيقاف الرد في القروبات!")
+        else:
+            await query.edit_message_text("⚠️ الرد في القروبات غير نشط!")
+    
+    async def start_random_reply(self, query, context):
+        """بدء الردود العشوائية في القروبات"""
+        admin_id = query.from_user.id
+        
+        accounts = self.db.get_active_publishing_accounts(admin_id)
+        if not accounts:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_group_replies")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد حسابات نشطة!",
+                reply_markup=reply_markup
+            )
+            return
+        
+        random_replies = self.db.get_group_random_replies(admin_id)
+        if not random_replies:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_group_replies")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد ردود عشوائية مضافة!",
+                reply_markup=reply_markup
+            )
+            return
+        
+        if self.manager.start_random_reply(admin_id):
+            keyboard = [[InlineKeyboardButton("⏹️ إيقاف الرد العشوائي", callback_data="stop_random_reply")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "🎲 **تم بدء الردود العشوائية بأقصى سرعة!**\n\n"
+                f"✅ **عدد الحسابات:** {len(accounts)}\n"
+                f"✅ **عدد الردود العشوائية:** {len(random_replies)}\n"
+                f"✅ **الرد على 100% من الرسائل**\n"
+                f"⚡ **بين الردود:** 0.05 ثانية\n"
+                f"⚡ **بين الدورات:** 3 ثواني\n\n"
+                "سيبدأ البوت بالرد العشوائي في القروبات الآن بأقصى سرعة ممكنة.",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⚠️ الرد العشوائي يعمل بالفعل!")
+    
+    async def stop_random_reply(self, query, context):
+        """إيقاف الردود العشوائية في القروبات"""
+        admin_id = query.from_user.id
+        
+        if self.manager.stop_random_reply(admin_id):
+            await query.edit_message_text("⏹️ تم إيقاف الرد العشوائي!")
+        else:
+            await query.edit_message_text("⚠️ الرد العشوائي غير نشط!")
+    
+    async def start_publishing(self, query, context):
+        """بدء النشر التلقائي"""
+        admin_id = query.from_user.id
+        
+        # التحقق من وجود حسابات
+        accounts = self.db.get_active_publishing_accounts(admin_id)
+        if not accounts:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد حسابات نشطة!\n\n"
+                "يجب إضافة حسابات أولاً قبل بدء النشر.",
+                reply_markup=reply_markup
+            )
+            return
+        
+        # التحقق من وجود إعلانات
+        ads = self.db.get_ads(admin_id)
+        if not ads:
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "❌ لا توجد إعلانات!\n\n"
+                "يجب إضافة إعلانات أولاً قبل بدء النشر.",
+                reply_markup=reply_markup
+            )
+            return
+        
+        if self.manager.start_publishing(admin_id):
+            keyboard = [
+                [InlineKeyboardButton("⏹️ إيقاف النشر", callback_data="stop_publishing")],
+                [InlineKeyboardButton("💬 بدء الرد في الخاص", callback_data="start_private_reply")],
+                [InlineKeyboardButton("👥 بدء الرد في القروبات", callback_data="start_group_reply")],
+                [InlineKeyboardButton("🎲 بدء الرد العشوائي", callback_data="start_random_reply")],
+                [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                "🚀 **تم بدء النشر بأقصى سرعة!**\n\n"
+                f"✅ **عدد الحسابات:** {len(accounts)}\n"
+                f"✅ **عدد الإعلانات:** {len(ads)}\n"
+                f"⏱️ **تأخير نشر القروبات:** 60 ثانية\n"
+                f"⚡ **بين الإعلانات:** 0.1 ثانية\n"
+                f"⚡ **بين المجموعات:** 0.2 ثانية\n"
+                f"⚡ **بين الدورات:** 30 ثانية\n\n"
+                "سيبدأ البوت بالنشر في جميع المجموعات الآن مع تأمين الحسابات.",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⚠️ النشر يعمل بالفعل!")
+    
+    async def stop_publishing(self, query, context):
+        """إيقاف النشر التلقائي"""
+        admin_id = query.from_user.id
+        
+        if self.manager.stop_publishing(admin_id):
+            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text("⏹️ تم إيقاف النشر!", reply_markup=reply_markup)
+        else:
+            await query.edit_message_text("⚠️ النشر غير نشط!")
