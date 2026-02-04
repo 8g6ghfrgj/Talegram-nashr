@@ -1,4 +1,5 @@
 import logging
+import traceback
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
@@ -7,6 +8,13 @@ from telegram.ext import (
     filters,
     CommandHandler,
     CallbackQueryHandler
+)
+
+from config import (
+    ADD_ACCOUNT, ADD_AD_TYPE, ADD_AD_TEXT, ADD_AD_MEDIA,
+    ADD_GROUP, ADD_PRIVATE_REPLY, ADD_ADMIN,
+    ADD_RANDOM_REPLY, ADD_PRIVATE_TEXT, ADD_GROUP_TEXT,
+    ADD_GROUP_PHOTO, OWNER_ID, MESSAGES
 )
 
 logger = logging.getLogger(__name__)
@@ -30,12 +38,12 @@ class ConversationHandlers:
         data = query.data
         user_id = query.from_user.id
         
+        logger.info(f"🖱️ الزر: {data} - المستخدم: {user_id}")
+        
         # التحقق من صلاحية المستخدم
         if not self.db.is_admin(user_id):
-            await query.edit_message_text("❌ ليس لديك صلاحية للوصول إلى هذا البوت.")
+            await query.edit_message_text(MESSAGES['unauthorized'])
             return
-        
-        logger.info(f"معالجة الزر: {data} للمستخدم: {user_id}")
         
         try:
             # معالجة أزرار الرجوع أولاً
@@ -52,10 +60,10 @@ class ConversationHandlers:
                 await self.account_handlers.show_accounts(query, context)
             elif data.startswith("delete_account_"):
                 try:
-                    account_id = int(data.split("_")[-1])
+                    account_id = int(data.replace("delete_account_", ""))
                     await self.account_handlers.delete_account(query, context, account_id)
-                except (ValueError, IndexError) as e:
-                    logger.error(f"خطأ في استخراج account_id من {data}: {e}")
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل account_id: {e}")
                     await query.edit_message_text("❌ خطأ في معالجة الأمر!")
             
             # أزرار إدارة الإعلانات
@@ -65,12 +73,14 @@ class ConversationHandlers:
                 await self.ad_handlers.add_ad_start(query, context)
             elif data == "show_ads":
                 await self.ad_handlers.show_ads(query, context)
+            elif data == "ad_stats":
+                await self.ad_handlers.show_ad_stats(query, context)
             elif data.startswith("delete_ad_"):
                 try:
-                    ad_id = int(data.split("_")[-1])
+                    ad_id = int(data.replace("delete_ad_", ""))
                     await self.ad_handlers.delete_ad(query, context, ad_id)
-                except (ValueError, IndexError) as e:
-                    logger.error(f"خطأ في استخراج ad_id من {data}: {e}")
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل ad_id: {e}")
                     await query.edit_message_text("❌ خطأ في معالجة الأمر!")
             
             # أزرار إدارة المجموعات
@@ -82,6 +92,8 @@ class ConversationHandlers:
                 await self.group_handlers.show_groups(query, context)
             elif data == "start_join_groups":
                 await self.group_handlers.start_join_groups(query, context)
+            elif data == "stop_join_groups":
+                await self.group_handlers.stop_join_groups(query, context)
             
             # أزرار إدارة المشرفين
             elif data == "manage_admins":
@@ -90,12 +102,16 @@ class ConversationHandlers:
                 await self.admin_handlers.add_admin_start(update, context)
             elif data == "show_admins":
                 await self.admin_handlers.show_admins(query, context)
+            elif data == "system_stats":
+                await self.admin_handlers.show_system_stats(query, context)
+            elif data == "export_data":
+                await self.admin_handlers.export_data(query, context)
             elif data.startswith("delete_admin_"):
                 try:
-                    admin_id = int(data.split("_")[-1])
+                    admin_id = int(data.replace("delete_admin_", ""))
                     await self.admin_handlers.delete_admin(query, context, admin_id)
-                except (ValueError, IndexError) as e:
-                    logger.error(f"خطأ في استخراج admin_id من {data}: {e}")
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل admin_id: {e}")
                     await query.edit_message_text("❌ خطأ في معالجة الأمر!")
             
             # أزرار إدارة الردود
@@ -117,6 +133,39 @@ class ConversationHandlers:
                 await self.reply_handlers.add_random_reply_start(update, context)
             
             # أزرار حذف الردود
+            elif data.startswith("delete_private_reply_"):
+                try:
+                    reply_id = int(data.replace("delete_private_reply_", ""))
+                    await self.reply_handlers.delete_private_reply(query, context, reply_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل reply_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
+            
+            elif data.startswith("delete_text_reply_"):
+                try:
+                    reply_id = int(data.replace("delete_text_reply_", ""))
+                    await self.reply_handlers.delete_text_reply(query, context, reply_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل reply_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
+            
+            elif data.startswith("delete_photo_reply_"):
+                try:
+                    reply_id = int(data.replace("delete_photo_reply_", ""))
+                    await self.reply_handlers.delete_photo_reply(query, context, reply_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل reply_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
+            
+            elif data.startswith("delete_random_reply_"):
+                try:
+                    reply_id = int(data.replace("delete_random_reply_", ""))
+                    await self.reply_handlers.delete_random_reply(query, context, reply_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل reply_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
+            
+            # أزرار عرض الردود للحذف
             elif data == "show_private_replies_delete":
                 await self.reply_handlers.show_private_replies_delete(query, context)
             elif data == "show_text_replies_delete":
@@ -150,10 +199,23 @@ class ConversationHandlers:
             elif data == "stop_random_reply":
                 await self.reply_handlers.stop_random_reply(query, context)
             
-            # أزرار أنواع الإعلانات
-            elif data.startswith("ad_type_"):
-                ad_type = data.replace("ad_type_", "")
-                await self.ad_handlers.handle_ad_type(query, context, ad_type)
+            # أزرار تبديل حالة الحسابات
+            elif data.startswith("toggle_account_"):
+                try:
+                    account_id = int(data.replace("toggle_account_", ""))
+                    await self.account_handlers.toggle_account_status(query, context, account_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل account_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
+            
+            # أزرار تحديث المجموعات
+            elif data.startswith("update_group_"):
+                try:
+                    group_id = int(data.replace("update_group_", ""))
+                    await self.update_group_status(query, context, group_id)
+                except ValueError as e:
+                    logger.error(f"خطأ في تحويل group_id: {e}")
+                    await query.edit_message_text("❌ خطأ في معالجة الأمر!")
             
             # الأزرار غير المعروفة
             else:
@@ -163,7 +225,7 @@ class ConversationHandlers:
                 )
                 
         except Exception as e:
-            logger.error(f"خطأ في معالجة الزر {data}: {e}", exc_info=True)
+            logger.error(f"خطأ في معالجة الزر {data}: {e}\n{traceback.format_exc()}")
             await query.edit_message_text(
                 "❌ حدث خطأ غير متوقع في النظام.\n"
                 "الرجاء المحاولة مرة أخرى أو الاتصال بالمطور."
@@ -197,8 +259,13 @@ class ConversationHandlers:
         user_id = query.from_user.id
         
         if not self.db.is_admin(user_id):
-            await query.edit_message_text("❌ ليس لديك صلاحية للوصول إلى هذا البوت.")
+            await query.edit_message_text(MESSAGES['unauthorized'])
             return
+        
+        # الحصول على إحصائيات سريعة
+        accounts_count = len(self.db.get_accounts(user_id))
+        ads_count = len(self.db.get_ads(user_id))
+        groups_count = len(self.db.get_groups(user_id))
         
         keyboard = [
             [InlineKeyboardButton("👥 إدارة الحسابات", callback_data="manage_accounts")],
@@ -212,15 +279,21 @@ class ConversationHandlers:
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.edit_message_text(
-            "🚀 لوحة تحكم البوت الفعلي - السرعة القصوى\n\n"
-            "⚡ النشر بأقصى سرعة ممكنة\n"
-            "⚡ الردود التلقائية بأقصى سرعة\n"
-            "⚡ الانضمام للمجموعات بأقصى سرعة\n\n"
-            "اختر الإجراء الذي تريد تنفيذه:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+        welcome_text = (
+            "🚀 **لوحة تحكم البوت الفعلي**\n\n"
+            "⚡ **المميزات:**\n"
+            "• النشر بأقصى سرعة مع تأمين الحسابات\n"
+            "• تأخير 60 ثانية بين نشر القروبات\n"
+            "• الردود التلقائية بأقصى سرعة\n"
+            "• الانضمام للمجموعات تلقائياً\n\n"
+            "📊 **إحصائياتك:**\n"
+            f"• الحسابات: {accounts_count}\n"
+            f"• الإعلانات: {ads_count}\n"
+            f"• المجموعات: {groups_count}\n\n"
+            "اختر الإجراء الذي تريد تنفيذه:"
         )
+        
+        await query.edit_message_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def start_publishing(self, query, context):
         """بدء النشر التلقائي"""
@@ -232,12 +305,7 @@ class ConversationHandlers:
             if not accounts:
                 keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(
-                    "❌ لا توجد حسابات نشطة!\n\n"
-                    "يجب إضافة حسابات أولاً قبل بدء النشر.",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
+                await query.edit_message_text(MESSAGES['no_accounts'], reply_markup=reply_markup)
                 return
             
             # التحقق من وجود إعلانات
@@ -245,12 +313,7 @@ class ConversationHandlers:
             if not ads:
                 keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.edit_message_text(
-                    "❌ لا توجد إعلانات!\n\n"
-                    "يجب إضافة إعلانات أولاً قبل بدء النشر.",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
+                await query.edit_message_text(MESSAGES['no_ads'], reply_markup=reply_markup)
                 return
             
             if self.manager.start_publishing(admin_id):
@@ -280,7 +343,7 @@ class ConversationHandlers:
                 await query.edit_message_text("⚠️ النشر يعمل بالفعل!")
                 
         except Exception as e:
-            logger.error(f"خطأ في بدء النشر: {e}")
+            logger.error(f"خطأ في بدء النشر: {e}\n{traceback.format_exc()}")
             await query.edit_message_text(
                 "❌ حدث خطأ في بدء النشر.\n"
                 "الرجاء المحاولة مرة أخرى."
@@ -303,13 +366,57 @@ class ConversationHandlers:
             logger.error(f"خطأ في إيقاف النشر: {e}")
             await query.edit_message_text("❌ حدث خطأ في إيقاف النشر.")
     
+    async def update_group_status(self, query, context, group_id):
+        """تحديث حالة مجموعة"""
+        user_id = query.from_user.id
+        
+        if not self.db.is_admin(user_id):
+            await query.edit_message_text(MESSAGES['unauthorized'])
+            return
+        
+        conn = self.db.conn if hasattr(self.db, 'conn') else None
+        if not conn:
+            import sqlite3
+            conn = sqlite3.connect(self.db.db_name)
+        
+        cursor = conn.cursor()
+        
+        try:
+            # الحصول على الحالة الحالية
+            cursor.execute('SELECT status FROM groups WHERE id = ? AND (admin_id = ? OR admin_id = 0)', 
+                          (group_id, user_id))
+            result = cursor.fetchone()
+            
+            if not result:
+                await query.edit_message_text(f"❌ المجموعة #{group_id} غير موجودة أو ليس لديك صلاحية لتعديلها!")
+                return
+            
+            current_status = result[0]
+            new_status = 'joined' if current_status == 'pending' else 'pending'
+            
+            # تحديث الحالة
+            cursor.execute('''UPDATE groups SET status = ?, join_date = CURRENT_TIMESTAMP WHERE id = ?''', 
+                          (new_status, group_id))
+            conn.commit()
+            
+            status_text = "منضمة" if new_status == 'joined' else "معلقة"
+            await query.edit_message_text(f"✅ تم تغيير حالة المجموعة #{group_id} إلى: {status_text}")
+            
+        except Exception as e:
+            logger.error(f"خطأ في تحديث حالة المجموعة: {e}")
+            await query.edit_message_text(f"❌ خطأ في تحديث الحالة: {str(e)}")
+        finally:
+            if conn:
+                conn.close()
+        
+        await self.group_handlers.show_groups(query, context)
+    
     def setup_conversation_handlers(self, application):
         """إعداد معالجات المحادثة"""
         # معالج الأزرار الرئيسي
         application.add_handler(CallbackQueryHandler(self.handle_callback))
         
         # محادثة إضافة الحساب
-        from config import ADD_ACCOUNT
         add_account_conv = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 self.account_handlers.add_account_start,
@@ -328,10 +435,9 @@ class ConversationHandlers:
         application.add_handler(add_account_conv)
         
         # محادثة إضافة الإعلان
-        from config import ADD_AD_TEXT, ADD_AD_MEDIA
         add_ad_conv = ConversationHandler(
             entry_points=[CallbackQueryHandler(
-                self.ad_handlers.handle_ad_type,
+                self.ad_handlers.add_ad_type,
                 pattern="^ad_type_"
             )],
             states={
@@ -352,7 +458,6 @@ class ConversationHandlers:
         application.add_handler(add_ad_conv)
         
         # محادثة إضافة المجموعة
-        from config import ADD_GROUP
         add_group_conv = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 self.group_handlers.add_group_start,
@@ -371,7 +476,6 @@ class ConversationHandlers:
         application.add_handler(add_group_conv)
         
         # محادثة إضافة المشرف
-        from config import ADD_ADMIN
         add_admin_conv = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 self.admin_handlers.add_admin_start,
@@ -390,7 +494,6 @@ class ConversationHandlers:
         application.add_handler(add_admin_conv)
         
         # محادثة إضافة رد خاص
-        from config import ADD_PRIVATE_TEXT
         private_reply_conv = ConversationHandler(
             entry_points=[CallbackQueryHandler(
                 self.reply_handlers.add_private_reply_start,
@@ -407,51 +510,137 @@ class ConversationHandlers:
             fallbacks=[CommandHandler("cancel", self.cancel)]
         )
         application.add_handler(private_reply_conv)
+        
+        # محادثة إضافة رد نصي في القروبات
+        group_text_reply_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(
+                self.reply_handlers.add_group_text_reply_start,
+                pattern="^add_group_text_reply$"
+            )],
+            states={
+                ADD_GROUP_TEXT: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.reply_handlers.add_group_text_reply_trigger
+                    ),
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.reply_handlers.add_group_text_reply_text
+                    )
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)],
+            map_to_parent={
+                ConversationHandler.END: ConversationHandler.END
+            }
+        )
+        application.add_handler(group_text_reply_conv)
+        
+        # محادثة إضافة رد مع صورة في القروبات
+        group_photo_reply_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(
+                self.reply_handlers.add_group_photo_reply_start,
+                pattern="^add_group_photo_reply$"
+            )],
+            states={
+                ADD_GROUP_PHOTO: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.reply_handlers.add_group_photo_reply_trigger
+                    ),
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.reply_handlers.add_group_photo_reply_text
+                    ),
+                    MessageHandler(
+                        filters.PHOTO,
+                        self.reply_handlers.add_group_photo_reply_photo
+                    )
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)]
+        )
+        application.add_handler(group_photo_reply_conv)
+        
+        # محادثة إضافة رد عشوائي
+        random_reply_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(
+                self.reply_handlers.add_random_reply_start,
+                pattern="^add_random_reply$"
+            )],
+            states={
+                ADD_RANDOM_REPLY: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND,
+                        self.reply_handlers.add_random_reply_text
+                    ),
+                    MessageHandler(
+                        filters.PHOTO,
+                        self.reply_handlers.add_random_reply_media
+                    ),
+                    CommandHandler("skip", self.reply_handlers.skip_random_reply_media)
+                ]
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel)]
+        )
+        application.add_handler(random_reply_conv)
+        
+        logger.info("✅ تم إعداد معالجات المحادثة")
     
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """إلغاء الأمر الحالي"""
         try:
             user_id = update.message.from_user.id
             if not self.db.is_admin(user_id):
-                await update.message.reply_text("❌ ليس لديك صلاحية للوصول إلى هذا البوت.")
+                await update.message.reply_text(MESSAGES['unauthorized'])
                 return ConversationHandler.END
             
             await update.message.reply_text("❌ تم إلغاء الأمر.")
-            await self.show_main_menu_for_user(user_id, update.message.chat_id, context)
             return ConversationHandler.END
             
         except Exception as e:
             logger.error(f"خطأ في إلغاء الأمر: {e}")
             return ConversationHandler.END
     
-    async def show_main_menu_for_user(self, user_id, chat_id, context):
-        """عرض القائمة الرئيسية لمستخدم معين"""
-        try:
-            if not self.db.is_admin(user_id):
-                return
-            
-            keyboard = [
-                [InlineKeyboardButton("👥 إدارة الحسابات", callback_data="manage_accounts")],
-                [InlineKeyboardButton("📢 إدارة الإعلانات", callback_data="manage_ads")],
-                [InlineKeyboardButton("👥 إدارة المجموعات", callback_data="manage_groups")],
-                [InlineKeyboardButton("💬 إدارة الردود", callback_data="manage_replies")],
-                [InlineKeyboardButton("👨‍💼 إدارة المشرفين", callback_data="manage_admins")],
-                [InlineKeyboardButton("🚀 بدء النشر", callback_data="start_publishing")],
-                [InlineKeyboardButton("⏹️ إيقاف النشر", callback_data="stop_publishing")]
-            ]
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="🚀 لوحة تحكم البوت الفعلي - السرعة القصوى\n\n"
-                     "⚡ النشر بأقصى سرعة ممكنة\n"
-                     "⚡ الردود التلقائية بأقصى سرعة\n"
-                     "⚡ الانضمام للمجموعات بأقصى سرعة\n\n"
-                     "اختر الإجراء الذي تريد تنفيذه:",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            
-        except Exception as e:
-            logger.error(f"خطأ في عرض القائمة الرئيسية: {e}")
+    async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """معالجة أمر /start"""
+        user_id = update.message.from_user.id
+        
+        if not self.db.is_admin(user_id):
+            await update.message.reply_text(MESSAGES['unauthorized'])
+            return
+        
+        # إنشاء سياق المستخدم
+        if user_id not in context.bot_data:
+            context.bot_data[user_id] = {}
+        
+        context.bot_data[user_id]['conversation_active'] = False
+        
+        keyboard = [
+            [InlineKeyboardButton("👥 إدارة الحسابات", callback_data="manage_accounts")],
+            [InlineKeyboardButton("📢 إدارة الإعلانات", callback_data="manage_ads")],
+            [InlineKeyboardButton("👥 إدارة المجموعات", callback_data="manage_groups")],
+            [InlineKeyboardButton("💬 إدارة الردود", callback_data="manage_replies")],
+            [InlineKeyboardButton("👨‍💼 إدارة المشرفين", callback_data="manage_admins")],
+            [InlineKeyboardButton("🚀 بدء النشر", callback_data="start_publishing")],
+            [InlineKeyboardButton("⏹️ إيقاف النشر", callback_data="stop_publishing")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🚀 لوحة تحكم البوت الفعلي\n\n"
+            "⚡ النشر بأقصى سرعة مع تأمين الحسابات\n"
+            "⚡ الردود التلقائية بأقصى سرعة\n"
+            "⚡ الانضمام للمجموعات بأقصى سرعة\n\n"
+            "اختر الإجراء الذي تريد تنفيذه:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    def get_handlers(self):
+        """الحصول على جميع المعالجات"""
+        return [
+            CommandHandler("start", self.handle_start),
+            CommandHandler("cancel", self.cancel),
+        ]
