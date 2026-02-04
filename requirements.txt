@@ -1,9 +1,11 @@
+# requirements.txt - النسخة المصححة
+
 # Telegram Libraries
 python-telegram-bot[job-queue]==20.7
 telethon==1.34.0
 
 # Database
-import sqlite3
+# sqlite3 is built-in with Python - REMOVE THIS LINE
 
 # Environment Variables
 python-dotenv==1.0.0
@@ -15,9 +17,8 @@ requests==2.31.0
 Pillow==10.1.0
 
 # Utilities
-asyncio
-python-magic==0.4.27
-
-# Additional
 APScheduler==3.10.4
 cryptography==41.0.7
+
+# Additional
+aiofiles==23.2.1
