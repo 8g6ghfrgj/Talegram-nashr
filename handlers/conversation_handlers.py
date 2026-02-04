@@ -1,6 +1,13 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters, CommandHandler
+from telegram.ext import (
+    ContextTypes, 
+    ConversationHandler, 
+    MessageHandler, 
+    filters, 
+    CommandHandler,
+    CallbackQueryHandler  # ← أضف هذا السطر!
+)
 from config import (
     ADD_ACCOUNT, ADD_AD_TYPE, ADD_AD_TEXT, ADD_AD_MEDIA,
     ADD_GROUP, ADD_PRIVATE_REPLY, ADD_ADMIN,
