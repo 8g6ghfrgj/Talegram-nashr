@@ -8,13 +8,12 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup
 )
-
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    ConversationHandler,
     MessageHandler,
+    ConversationHandler,
     ContextTypes,
     filters
 )
@@ -22,11 +21,12 @@ from telegram.ext import (
 from config import (
     BOT_TOKEN,
     OWNER_ID,
-    ADD_ACCOUNT,
-    MESSAGES
+    MESSAGES,
+    ADD_ACCOUNT
 )
 
 from database.database import BotDatabase
+from managers.telegram_manager import TelegramBotManager
 
 from handlers.account_handlers import AccountHandlers
 from handlers.ad_handlers import AdHandlers
@@ -35,16 +35,14 @@ from handlers.reply_handlers import ReplyHandlers
 from handlers.admin_handlers import AdminHandlers
 from handlers.conversation_handlers import ConversationHandlers
 
-from managers.telegram_manager import TelegramBotManager
-
 
 # ==================================================
 # LOGGING
 # ==================================================
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
@@ -62,10 +60,7 @@ class MainBot:
             print("❌ BOT_TOKEN غير موجود")
             sys.exit(1)
 
-        # Database
         self.db = BotDatabase()
-
-        # Manager
         self.manager = TelegramBotManager(self.db)
 
         # Handlers
@@ -85,30 +80,17 @@ class MainBot:
             self.reply_handlers
         )
 
-        # Telegram app
         self.app = Application.builder().token(BOT_TOKEN).build()
 
         self.setup_handlers()
 
-        self.add_owner_if_not_exists()
-
-        print("✅ البوت جاهز")
-
-
-    # ==================================================
-    # OWNER
-    # ==================================================
-
-    def add_owner_if_not_exists(self):
-        try:
-            self.db.add_admin(
-                OWNER_ID,
-                "@owner",
-                "المالك الرئيسي",
-                True
-            )
-        except:
-            pass
+        # إضافة المالك إذا لم يكن موجود
+        self.db.add_admin(
+            OWNER_ID,
+            "@owner",
+            "المالك الرئيسي",
+            True
+        )
 
 
     # ==================================================
@@ -135,9 +117,19 @@ class MainBot:
 
         await update.message.reply_text(
             MESSAGES["start"],
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode="Markdown"
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+
+    # ==================================================
+    # CANCEL
+    # ==================================================
+
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        await update.message.reply_text("❌ تم الإلغاء")
+        await self.start(update, context)
+        return ConversationHandler.END
 
 
     # ==================================================
@@ -149,17 +141,16 @@ class MainBot:
         query = update.callback_query
         await query.answer()
 
+        data = query.data
         user_id = query.from_user.id
 
         if not self.db.is_admin(user_id):
             await query.edit_message_text(MESSAGES["unauthorized"])
             return
 
-        data = query.data
-
         try:
 
-            # ---------- MAIN MENUS ----------
+            # ===== MAIN MENUS =====
 
             if data == "manage_accounts":
                 await self.account_handlers.manage_accounts(query, context)
@@ -183,17 +174,33 @@ class MainBot:
                 await self.conversation_handlers.stop_publishing(query, context)
 
 
-            # ---------- ACCOUNT SECTION ----------
+            # ===== BACK BUTTONS =====
+
+            elif data in [
+                "back_to_main",
+                "back_to_accounts",
+                "back_to_ads",
+                "back_to_groups",
+                "back_to_replies",
+                "back_to_admins",
+                "back_to_private_replies",
+                "back_to_group_replies"
+            ]:
+                await self.conversation_handlers.handle_back_buttons(
+                    query, context, data
+                )
+
+
+            # ===== ACCOUNT CALLBACKS =====
 
             elif data == "add_account":
-                return await self.account_handlers.add_account_start(update, context)
+                await self.account_handlers.add_account_start(update, context)
 
             elif data == "show_accounts":
                 await self.account_handlers.show_accounts(query, context)
 
             elif data == "account_stats":
                 await self.account_handlers.show_account_stats(query, context)
-
 
             elif data.startswith("delete_account_"):
                 acc_id = int(data.split("_")[-1])
@@ -204,65 +211,25 @@ class MainBot:
                 await self.account_handlers.toggle_account_status(query, context, acc_id)
 
 
-            # ---------- BACK BUTTONS ----------
-
-            elif data in (
-                "back_to_main",
-                "back_to_accounts",
-                "back_to_ads",
-                "back_to_groups",
-                "back_to_replies",
-                "back_to_admins",
-                "back_to_private_replies",
-                "back_to_group_replies"
-            ):
-                await self.conversation_handlers.handle_back_buttons(
-                    query, context, data
-                )
-
-
-            # ---------- OTHER CALLBACKS ----------
+            # ===== OTHER CALLBACKS =====
 
             else:
                 await self.conversation_handlers.handle_callback(query, context)
 
 
         except Exception as e:
-
             logger.error(f"Callback error: {e}")
-
-            try:
-                await query.edit_message_text(
-                    "❌ حدث خطأ غير متوقع في النظام."
-                )
-            except:
-                pass
+            await query.edit_message_text(
+                "❌ حدث خطأ غير متوقع في النظام.\n"
+                "الرجاء المحاولة مرة أخرى."
+            )
 
 
     # ==================================================
-    # CANCEL
+    # TEXT HANDLER
     # ==================================================
 
-    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-        user_id = update.message.from_user.id
-
-        if not self.db.is_admin(user_id):
-            await update.message.reply_text(MESSAGES["unauthorized"])
-            return ConversationHandler.END
-
-        await update.message.reply_text("❌ تم الإلغاء")
-
-        await self.start(update, context)
-
-        return ConversationHandler.END
-
-
-    # ==================================================
-    # TEXT FALLBACK
-    # ==================================================
-
-    async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_id = update.message.from_user.id
 
@@ -270,13 +237,9 @@ class MainBot:
             await update.message.reply_text(MESSAGES["unauthorized"])
             return
 
-        await update.message.reply_text(
-            "⚠️ استخدم الأزرار للتنقل داخل البوت"
-        )
-
 
     # ==================================================
-    # HANDLERS SETUP
+    # SETUP
     # ==================================================
 
     def setup_handlers(self):
@@ -284,14 +247,35 @@ class MainBot:
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("cancel", self.cancel))
 
-        # Conversation handlers (ads, replies, etc)
+        # Conversations
         self.conversation_handlers.setup_conversation_handlers(self.app)
 
+        # Callbacks
         self.app.add_handler(CallbackQueryHandler(self.handle_callback))
 
+        # Messages
         self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_text)
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
+
+        self.app.add_error_handler(self.error_handler)
+
+
+    # ==================================================
+    # ERRORS
+    # ==================================================
+
+    async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
+
+        logger.error(context.error)
+
+        if update and getattr(update, "effective_message", None):
+            try:
+                await update.effective_message.reply_text(
+                    "❌ حدث خطأ في النظام"
+                )
+            except:
+                pass
 
 
     # ==================================================
@@ -300,11 +284,8 @@ class MainBot:
 
     def run(self):
 
-        print("🚀 البوت يعمل الآن...")
-
-        self.app.run_polling(
-            drop_pending_updates=True
-        )
+        print("🚀 Bot is running...")
+        self.app.run_polling()
 
 
 # ==================================================
@@ -312,6 +293,7 @@ class MainBot:
 # ==================================================
 
 def main():
+
     bot = MainBot()
     bot.run()
 
