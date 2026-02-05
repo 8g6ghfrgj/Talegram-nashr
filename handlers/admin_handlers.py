@@ -16,7 +16,7 @@ class AdminHandlers:
     # HELPERS
     # ==================================================
 
-    def is_owner(self, user_id):
+    def is_owner(self, user_id: int) -> bool:
         return user_id == OWNER_ID
 
     # ==================================================
@@ -39,7 +39,7 @@ class AdminHandlers:
         ]
 
         await query.edit_message_text(
-            f"👨‍💼 إدارة المشرفين\n\nالمالك: {OWNER_ID}",
+            f"👨‍💼 إدارة المشرفين\n\n👑 المالك: {OWNER_ID}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -56,7 +56,7 @@ class AdminHandlers:
             return ConversationHandler.END
 
         await update.callback_query.edit_message_text(
-            "أرسل User ID للمشرف الجديد:"
+            "📩 أرسل User ID للمشرف الجديد:"
         )
 
         return ADD_ADMIN
@@ -79,7 +79,10 @@ class AdminHandlers:
             try:
                 user = await context.bot.get_chat(admin_user_id)
                 username = f"@{user.username}" if user.username else "لا يوجد"
-                full_name = f"{user.first_name} {user.last_name}" if user.last_name else user.first_name
+                full_name = (
+                    f"{user.first_name} {user.last_name}"
+                    if user.last_name else user.first_name
+                )
             except Exception:
                 username = "غير معروف"
                 full_name = f"مستخدم {admin_user_id}"
@@ -91,13 +94,15 @@ class AdminHandlers:
                 False
             )
 
-            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_admins")]]
+            keyboard = [
+                [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_admins")]
+            ]
 
             await update.message.reply_text(
                 f"{'✅' if success else '❌'} {message}\n\n"
-                f"الاسم: {full_name}\n"
-                f"المعرف: {admin_user_id}\n"
-                f"المستخدم: {username}",
+                f"👤 الاسم: {full_name}\n"
+                f"🆔 المعرف: {admin_user_id}\n"
+                f"🔗 المستخدم: {username}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
@@ -120,15 +125,16 @@ class AdminHandlers:
         admins = self.db.get_admins()
 
         if not admins:
-            await query.edit_message_text("❌ لا توجد مشرفين")
+            await query.edit_message_text("❌ لا يوجد مشرفون")
             return
 
-        text = "👨‍💼 المشرفين\n\n"
+        text = "👨‍💼 قائمة المشرفين\n\n"
         keyboard = []
 
         can_delete = self.is_owner(query.from_user.id)
 
         for admin in admins:
+
             admin_id, user_id, username, full_name, added_date, is_super = admin
 
             if user_id == OWNER_ID:
@@ -184,25 +190,6 @@ class AdminHandlers:
         await self.show_admins(query, context)
 
     # ==================================================
-    # TOGGLE ROLE
-    # ==================================================
-
-    async def toggle_admin_status(self, query, context, admin_id):
-
-        if not self.is_owner(query.from_user.id):
-            await query.edit_message_text(
-                MESSAGES["owner_only"].format(OWNER_ID)
-            )
-            return
-
-        if self.db.toggle_admin_status(admin_id):
-            await query.edit_message_text("✅ تم تغيير الدور")
-        else:
-            await query.edit_message_text("❌ فشل تغيير الدور")
-
-        await self.show_admins(query, context)
-
-    # ==================================================
     # SYSTEM STATS
     # ==================================================
 
@@ -218,11 +205,12 @@ class AdminHandlers:
 
         text = (
             "📊 إحصائيات النظام\n\n"
-            f"الحسابات: {stats['accounts']['total']} (نشطة {stats['accounts']['active']})\n"
-            f"الإعلانات: {stats['ads']}\n\n"
-            f"المجموعات: {stats['groups']['total']}\n"
-            f"المنضمة: {stats['groups']['joined']}\n"
-            f"المعلقة: {stats['groups']['total'] - stats['groups']['joined']}\n"
+            f"👥 الحسابات: {stats['accounts']['total']} "
+            f"(نشطة {stats['accounts']['active']})\n\n"
+            f"📢 الإعلانات: {stats['ads']}\n\n"
+            f"👥 المجموعات: {stats['groups']['total']}\n"
+            f"✅ المنضمة: {stats['groups']['joined']}\n"
+            f"⏳ المعلقة: {stats['groups']['total'] - stats['groups']['joined']}\n"
         )
 
         keyboard = [
@@ -234,31 +222,3 @@ class AdminHandlers:
             text,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
-    # ==================================================
-    # EXPORT DATA
-    # ==================================================
-
-    async def export_data(self, query, context):
-
-        if not self.is_owner(query.from_user.id):
-            await query.edit_message_text(
-                MESSAGES["owner_only"].format(OWNER_ID)
-            )
-            return
-
-        await query.edit_message_text("📤 جاري تصدير البيانات...")
-
-        try:
-            filename = self.db.export_system_data()
-
-            keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_admins")]]
-
-            await query.edit_message_text(
-                f"✅ تم تصدير البيانات\n\n📁 الملف: {filename}",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-        except Exception as e:
-            logger.error(e)
-            await query.edit_message_text("❌ فشل تصدير البيانات")
