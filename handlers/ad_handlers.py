@@ -37,7 +37,7 @@ class AdHandlers:
         )
 
     # ==================================================
-    # ADD AD
+    # ADD AD START
     # ==================================================
 
     async def add_ad_start(self, query, context):
@@ -45,6 +45,8 @@ class AdHandlers:
         if not self.db.is_admin(query.from_user.id):
             await query.edit_message_text(MESSAGES["unauthorized"])
             return ConversationHandler.END
+
+        context.user_data.clear()
 
         keyboard = [
             [InlineKeyboardButton(AD_TYPES["text"], callback_data="ad_type_text")],
@@ -57,6 +59,10 @@ class AdHandlers:
             "📢 اختر نوع الإعلان:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+    # ==================================================
+    # AD TYPE
+    # ==================================================
 
     async def add_ad_type(self, query, context):
 
@@ -78,6 +84,7 @@ class AdHandlers:
 
     async def add_ad_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        user_id = update.message.from_user.id
         ad_type = context.user_data.get("ad_type")
 
         if not ad_type:
@@ -99,7 +106,7 @@ class AdHandlers:
                 text,
                 None,
                 "text",
-                update.message.from_user.id
+                user_id
             )
 
             if success:
@@ -122,6 +129,7 @@ class AdHandlers:
 
     async def add_ad_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        user_id = update.message.from_user.id
         ad_type = context.user_data.get("ad_type")
         ad_text = context.user_data.get("ad_text", "")
 
@@ -131,8 +139,8 @@ class AdHandlers:
 
         os.makedirs("temp_files/ads", exist_ok=True)
 
-        file_path = None
         success = False
+        file_path = None
 
         # ---------- PHOTO ----------
 
@@ -151,7 +159,7 @@ class AdHandlers:
                 ad_text,
                 file_path,
                 "photo",
-                update.message.from_user.id
+                user_id
             )
 
         # ---------- CONTACT FILE ----------
@@ -170,7 +178,7 @@ class AdHandlers:
                 None,
                 file_path,
                 "contact",
-                update.message.from_user.id
+                user_id
             )
 
         # ---------- DIRECT CONTACT ----------
@@ -198,7 +206,7 @@ class AdHandlers:
                 None,
                 file_path,
                 "contact",
-                update.message.from_user.id
+                user_id
             )
 
         else:
@@ -246,7 +254,10 @@ class AdHandlers:
             text += f"{added[:16]}\n──────────\n"
 
             keyboard.append([
-                InlineKeyboardButton(f"🗑️ حذف #{ad_id}", callback_data=f"delete_ad_{ad_id}")
+                InlineKeyboardButton(
+                    f"🗑️ حذف #{ad_id}",
+                    callback_data=f"delete_ad_{ad_id}"
+                )
             ])
 
         keyboard.append([
@@ -266,9 +277,9 @@ class AdHandlers:
     async def delete_ad(self, query, context, ad_id):
 
         if self.db.delete_ad(ad_id, query.from_user.id):
-            await query.answer("تم الحذف")
+            await query.answer("✅ تم الحذف")
         else:
-            await query.answer("فشل الحذف")
+            await query.answer("❌ فشل الحذف")
 
         await self.show_ads(query, context)
 
@@ -303,4 +314,4 @@ class AdHandlers:
         await query.edit_message_text(
             text,
             reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+        )
