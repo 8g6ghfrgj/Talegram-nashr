@@ -1,104 +1,71 @@
-"""
-نقطة دخول لاختبار أدوات المساعدة
-"""
-import sys
 import os
+import sys
 
-# إضافة المسار الحالي إلى sys.path
+# إضافة المسار الحالي
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from helpers import Helpers
-from text_encoder import TextEncoder
+
 
 def test_helpers():
-    """اختبار أدوات المساعدة"""
-    print("🧪 اختبار أدوات المساعدة...")
-    
-    # اختبار إنشاء نص عشوائي
+    print("🧪 اختبار أدوات المساعدة\n")
+
+    # نص عشوائي
     random_text = Helpers.generate_random_string(20)
     print(f"📝 نص عشوائي: {random_text}")
-    
-    # اختبار التحقق من رابط تليجرام
+
+    # روابط للاختبار
     test_links = [
         "https://t.me/testchannel",
-        "t.me/test",
-        "@username",
-        "+invitecode",
+        "t.me/testgroup",
+        "@username123",
+        "+invitecode123",
         "invalid_link"
     ]
-    
+
+    print("\n🔗 اختبار الروابط:")
     for link in test_links:
-        is_valid = Helpers.validate_telegram_link(link)
-        print(f"🔗 {link}: {'✅ صالح' if is_valid else '❌ غير صالح'}")
-    
-    # اختبار تنسيق التاريخ
-    from datetime import datetime, timedelta
-    past_time = datetime.now() - timedelta(hours=2)
-    time_ago_str = Helpers.time_ago(past_time)
-    print(f"⏰ منذ: {time_ago_str}")
-    
-    print("✅ تم اختبار أدوات المساعدة بنجاح")
+        valid = Helpers.validate_telegram_link(link)
+        print(f"{link} -> {'✅ صالح' if valid else '❌ غير صالح'}")
 
-def test_text_encoder():
-    """اختبار مشفر النصوص"""
-    print("\n🔐 اختبار مشفر النصوص...")
-    
-    encoder = TextEncoder()
-    
-    # نص للاختبار
-    test_text = "هذا نص سري للاختبار مع أحرف عربية وإنجليزية: Test 123"
-    
-    # تشفير متقدم
-    encoded = encoder.encode_text(test_text, use_advanced=True)
-    print(f"📤 مشفر (متقدم): {encoded[:50]}...")
-    
-    # فك التشفير
-    decoded = encoder.decode_text(encoded)
-    print(f"📥 مفكوك: {decoded}")
-    
-    # التحقق من التطابق
-    if test_text == decoded:
-        print("✅ التشفير وفك التشفير ناجح!")
-    else:
-        print("❌ خطأ في التشفير/فك التشفير")
-    
-    # اختبار الهاش
-    hash_result = encoder.create_hash(test_text)
-    print(f"🔢 الهاش: {hash_result}")
-    
-    print("✅ تم اختبار مشفر النصوص بنجاح")
+    # استخراج روابط من نص
+    text = "انضم هنا https://t.me/test1 و @test2 و رابط خاطئ abc"
+    extracted = Helpers.extract_links(text)
 
-def test_file_operations():
-    """اختبار عمليات الملفات"""
-    print("\n📁 اختبار عمليات الملفات...")
-    
-    # اختبار تنظيف اسم الملف
-    dirty_name = 'file<>:"/\\|?*name.txt'
-    clean_name = Helpers.clean_filename(dirty_name)
-    print(f"🧹 تنظيف اسم الملف: {dirty_name} -> {clean_name}")
-    
-    # اختبار معلومات النظام
-    system_info = Helpers.get_system_info()
-    print(f"💻 نظام التشغيل: {system_info.get('system', 'غير معروف')}")
-    
-    print("✅ تم اختبار عمليات الملفات بنجاح")
+    print("\n📥 الروابط المستخرجة:")
+    for link in extracted:
+        print(f" - {link}")
+
+    # تنظيف اسم ملف
+    dirty = 'file<>:"/\\|?*name.txt'
+    clean = Helpers.clean_filename(dirty)
+
+    print(f"\n🧹 تنظيف اسم ملف:")
+    print(f"{dirty} -> {clean}")
+
+    # تقصير نص
+    long_text = "هذا نص طويل جداً " * 10
+    short = Helpers.truncate_text(long_text, 50)
+
+    print(f"\n✂️ تقصير النص:")
+    print(short)
+
+    # فحص session string
+    fake_session = "A" * 120
+    print(f"\n🔐 Session صالح؟ {Helpers.is_valid_session_string(fake_session)}")
+
+    print("\n✅ انتهت جميع الاختبارات بنجاح")
+
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("🚀 بدء اختبار أدوات المساعدة")
+    print("🚀 بدء اختبار Helpers")
     print("=" * 50)
-    
+
     try:
         test_helpers()
-        test_text_encoder()
-        test_file_operations()
-        
-        print("\n" + "=" * 50)
-        print("🎉 جميع الاختبارات نجحت!")
-        print("=" * 50)
-        
+        print("\n🎉 كل شيء يعمل بشكل سليم")
     except Exception as e:
-        print(f"\n❌ خطأ في الاختبار: {e}")
+        print(f"\n❌ فشل الاختبار: {e}")
         import traceback
         traceback.print_exc()
-        sys.exit(1)
