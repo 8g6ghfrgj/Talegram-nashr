@@ -33,7 +33,6 @@ class ReplyHandlers:
         keyboard = [
             [InlineKeyboardButton("💬 الردود في الخاص", callback_data="private_replies")],
             [InlineKeyboardButton("👥 الردود في القروبات", callback_data="group_replies")],
-            [InlineKeyboardButton("🗑️ حذف الردود", callback_data="show_replies")],
             [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]
         ]
 
@@ -113,7 +112,7 @@ class ReplyHandlers:
         )
 
     # ==================================================
-    # GROUP TEXT REPLY
+    # GROUP TEXT REPLY (TRIGGER -> TEXT)
     # ==================================================
 
     async def add_group_text_reply_start(self, update, context):
@@ -140,6 +139,10 @@ class ReplyHandlers:
 
         trigger = context.user_data.get("trigger")
         reply_text = update.message.text.strip()
+
+        if not trigger:
+            await update.message.reply_text("❌ لم يتم تحديد المحفز")
+            return ConversationHandler.END
 
         self.db.add_group_text_reply(
             trigger,
@@ -188,13 +191,17 @@ class ReplyHandlers:
 
     async def add_group_photo_reply_photo(self, update, context):
 
-        trigger = context.user_data["trigger"]
+        trigger = context.user_data.get("trigger")
         reply_text = context.user_data.get("reply_text", "")
+
+        if not trigger:
+            await update.message.reply_text("❌ لم يتم تحديد المحفز")
+            return ConversationHandler.END
 
         os.makedirs("temp_files/group_replies", exist_ok=True)
 
         file = await update.message.photo[-1].get_file()
-        path = f"temp_files/group_replies/{datetime.now().timestamp()}.jpg"
+        path = f"temp_files/group_replies/{int(datetime.now().timestamp())}.jpg"
 
         await file.download_to_drive(path)
 
@@ -236,14 +243,18 @@ class ReplyHandlers:
 
     async def add_random_reply_media(self, update, context):
 
-        text = context.user_data["text"]
+        text = context.user_data.get("text")
+
+        if not text:
+            await update.message.reply_text("❌ لم يتم تحديد النص")
+            return ConversationHandler.END
 
         media_path = None
 
         if update.message.photo:
             os.makedirs("temp_files/random_replies", exist_ok=True)
             file = await update.message.photo[-1].get_file()
-            media_path = f"temp_files/random_replies/{datetime.now().timestamp()}.jpg"
+            media_path = f"temp_files/random_replies/{int(datetime.now().timestamp())}.jpg"
             await file.download_to_drive(media_path)
 
         self.db.add_group_random_reply(
@@ -259,8 +270,14 @@ class ReplyHandlers:
 
     async def skip_random_reply_media(self, update, context):
 
+        text = context.user_data.get("text")
+
+        if not text:
+            await update.message.reply_text("❌ لا يوجد نص محفوظ")
+            return ConversationHandler.END
+
         self.db.add_group_random_reply(
-            context.user_data["text"],
+            text,
             None,
             update.message.from_user.id
         )
