@@ -1,13 +1,20 @@
 """
-حزمة قاعدة البيانات للبوت الفعلي
+حزمة قاعدة البيانات للبوت
 
-هذه الحزمة تحتوي على:
-1. BotDatabase: الفئة الرئيسية لإدارة قاعدة البيانات
-2. TextEncoder: فئة لتشفير وفك تشفير النصوص
+تحتوي على:
+
+1. BotDatabase : إدارة قاعدة البيانات بالكامل
+2. TextEncoder : طبقة توافق (بدون تشفير فعلي)
 """
 
 from .database import BotDatabase
 from .text_encoder import TextEncoder
 
-__all__ = ['BotDatabase', 'TextEncoder']
-__version__ = '1.0.0'
+
+__all__ = [
+    "BotDatabase",
+    "TextEncoder"
+]
+
+
+__version__ = "1.0.0"
