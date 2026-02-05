@@ -11,7 +11,6 @@ from telegram.ext import (
 
 from config import (
     ADD_ACCOUNT,
-    ADD_AD_TYPE,
     ADD_AD_TEXT,
     ADD_AD_MEDIA,
     ADD_GROUP,
@@ -55,7 +54,7 @@ class ConversationHandlers:
         user_id = query.from_user.id
 
         if not self.db.is_admin(user_id):
-            await query.edit_message_text("❌ ليس لديك صلاحية.")
+            await query.edit_message_text("❌ ليس لديك صلاحية")
             return
 
         logger.info(f"BUTTON => {data}")
@@ -70,7 +69,7 @@ class ConversationHandlers:
 
             # ---------- ACCOUNTS ----------
 
-            elif data == "manage_accounts":
+            if data == "manage_accounts":
                 await self.account_handlers.manage_accounts(query, context)
 
             elif data == "show_accounts":
@@ -80,20 +79,19 @@ class ConversationHandlers:
                 await self.account_handlers.show_account_stats(query, context)
 
             elif data.startswith("delete_account_"):
-                acc_id = int(data.split("_")[-1])
-                await self.account_handlers.delete_account(query, context, acc_id)
+                await self.account_handlers.delete_account(
+                    query, context, int(data.split("_")[-1])
+                )
 
             elif data.startswith("toggle_account_"):
-                acc_id = int(data.split("_")[-1])
-                await self.account_handlers.toggle_account_status(query, context, acc_id)
+                await self.account_handlers.toggle_account_status(
+                    query, context, int(data.split("_")[-1])
+                )
 
             # ---------- ADS ----------
 
             elif data == "manage_ads":
                 await self.ad_handlers.manage_ads(query, context)
-
-            elif data == "add_ad":
-                await self.ad_handlers.add_ad_start(query, context)
 
             elif data == "show_ads":
                 await self.ad_handlers.show_ads(query, context)
@@ -102,8 +100,9 @@ class ConversationHandlers:
                 await self.ad_handlers.show_ad_stats(query, context)
 
             elif data.startswith("delete_ad_"):
-                ad_id = int(data.split("_")[-1])
-                await self.ad_handlers.delete_ad(query, context, ad_id)
+                await self.ad_handlers.delete_ad(
+                    query, context, int(data.split("_")[-1])
+                )
 
             # ---------- GROUPS ----------
 
@@ -134,12 +133,14 @@ class ConversationHandlers:
                 await self.admin_handlers.show_system_stats(query, context)
 
             elif data.startswith("delete_admin_"):
-                admin_id = int(data.split("_")[-1])
-                await self.admin_handlers.delete_admin(query, context, admin_id)
+                await self.admin_handlers.delete_admin(
+                    query, context, int(data.split("_")[-1])
+                )
 
             elif data.startswith("toggle_admin_"):
-                admin_id = int(data.split("_")[-1])
-                await self.admin_handlers.toggle_admin_status(query, context, admin_id)
+                await self.admin_handlers.toggle_admin_status(
+                    query, context, int(data.split("_")[-1])
+                )
 
             # ---------- REPLIES ----------
 
@@ -152,8 +153,23 @@ class ConversationHandlers:
             elif data == "group_replies":
                 await self.reply_handlers.manage_group_replies(query, context)
 
-            elif data == "show_replies":
-                await self.reply_handlers.show_replies_menu(query, context)
+            elif data == "start_private_reply":
+                await self.reply_handlers.start_private_reply(query, context)
+
+            elif data == "stop_private_reply":
+                await self.reply_handlers.stop_private_reply(query, context)
+
+            elif data == "start_group_reply":
+                await self.reply_handlers.start_group_reply(query, context)
+
+            elif data == "stop_group_reply":
+                await self.reply_handlers.stop_group_reply(query, context)
+
+            elif data == "start_random_reply":
+                await self.reply_handlers.start_random_reply(query, context)
+
+            elif data == "stop_random_reply":
+                await self.reply_handlers.stop_random_reply(query, context)
 
             # ---------- PUBLISH ----------
 
@@ -162,11 +178,6 @@ class ConversationHandlers:
 
             elif data == "stop_publishing":
                 await self.stop_publishing(query, context)
-
-            # ---------- CONVERSATION IGNORE ----------
-
-            elif data.startswith("ad_type_"):
-                return
 
             else:
                 await query.edit_message_text("❌ زر غير معروف")
@@ -188,8 +199,6 @@ class ConversationHandlers:
             "back_to_groups": self.group_handlers.manage_groups,
             "back_to_admins": self.admin_handlers.manage_admins,
             "back_to_replies": self.reply_handlers.manage_replies,
-            "back_to_private_replies": self.reply_handlers.manage_private_replies,
-            "back_to_group_replies": self.reply_handlers.manage_group_replies,
         }
 
         func = mapping.get(data)
@@ -247,7 +256,7 @@ class ConversationHandlers:
             ]
 
             await query.edit_message_text(
-                f"✅ بدأ النشر بنجاح\n\n"
+                f"✅ بدأ النشر\n\n"
                 f"👥 الحسابات: {len(accounts)}\n"
                 f"📢 الإعلانات: {len(ads)}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -257,15 +266,13 @@ class ConversationHandlers:
 
     async def stop_publishing(self, query, context):
 
-        admin_id = query.from_user.id
-
-        if self.manager.stop_publishing(admin_id):
+        if self.manager.stop_publishing(query.from_user.id):
             await query.edit_message_text("⏹️ تم إيقاف النشر")
         else:
             await query.edit_message_text("⚠️ النشر غير نشط")
 
     # ==================================================
-    # CONVERSATION SETUP
+    # CONVERSATIONS SETUP
     # ==================================================
 
     def setup_conversation_handlers(self, application):
@@ -303,12 +310,6 @@ class ConversationHandlers:
                     )
                 ],
                 states={
-                    ADD_AD_TYPE: [
-                        CallbackQueryHandler(
-                            self.ad_handlers.add_ad_type,
-                            pattern="^ad_type_"
-                        )
-                    ],
                     ADD_AD_TEXT: [
                         MessageHandler(
                             filters.TEXT & ~filters.COMMAND,
@@ -418,7 +419,7 @@ class ConversationHandlers:
             )
         )
 
-        # ===== MAIN CALLBACK ROUTER =====
+        # ===== MAIN ROUTER =====
 
         application.add_handler(
             CallbackQueryHandler(self.handle_callback)
