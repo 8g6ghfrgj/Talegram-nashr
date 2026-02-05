@@ -1,60 +1,71 @@
 import os
 from logging import INFO
 
-# ============ إعدادات البوت ============
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
-# ============ المالك الرئيسي ============
-OWNER_ID = 8148890042  # المالك الوحيد الذي يستطيع إضافة مشرفين
+# ================= BOT =================
 
-# ============ إعدادات قاعدة البيانات ============
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+
+
+# ================= OWNER =================
+
+OWNER_ID = 8148890042
+
+
+# ================= DATABASE =================
+
 DB_NAME = "bot_database.db"
 
-# ============ تأخيرات النشر (حسب خوارزميات تليجرام) ============
+
+# ================= DELAYS =================
+
 DELAY_SETTINGS = {
-    # تأخيرات النشر - تم زيادتها لتجنب حظر الحسابات
-    'publishing': {
-        'between_ads': 0.1,          # بين الإعلانات في نفس المجموعة
-        'between_groups': 0.2,       # بين المجموعات المختلفة
-        'between_cycles': 30,        # بين الدورات الرئيسية (زادت من 10 إلى 30)
-        'group_publishing_delay': 60, # تأخير إجباري 60 ثانية بين نشر القروبات
+
+    "publishing": {
+        "between_ads": 0.1,
+        "between_groups": 0.2,
+        "between_cycles": 30,
+        "group_publishing_delay": 60
     },
-    
-    # تأخيرات الردود
-    'private_reply': {
-        'between_replies': 0.05,     # بين الردود في الخاص
-        'between_cycles': 3,         # بين الدورات
+
+    "private_reply": {
+        "between_replies": 0.05,
+        "between_cycles": 3
     },
-    
-    'group_reply': {
-        'between_replies': 0.05,     # بين الردود في القروبات
-        'between_cycles': 3,         # بين الدورات
+
+    "group_reply": {
+        "between_replies": 0.05,
+        "between_cycles": 3
     },
-    
-    'random_reply': {
-        'between_replies': 0.05,     # بين الردود العشوائية
-        'between_cycles': 3,         # بين الدورات
+
+    "random_reply": {
+        "between_replies": 0.05,
+        "between_cycles": 3
     },
-    
-    # تأخيرات الانضمام للمجموعات
-    'join_groups': {
-        'between_links': 90,         # بين الروابط (90 ثانية)
-        'between_cycles': 5,         # بين الدورات
+
+    "join_groups": {
+        "between_links": 90,
+        "between_cycles": 5
     }
 }
 
-# ============ إعدادات الملفات ============
+
+# ================= FILES =================
+
 FILE_SETTINGS = {
-    'contact_filename': "تسوي سكليف صحتي واتساب.vcf",  # اسم ملف جهات الاتصال
-    'directories': {
-        'ads': "temp_files/ads",
-        'group_replies': "temp_files/group_replies",
-        'random_replies': "temp_files/random_replies",
+
+    "contact_filename": "تسوي سكليف صحتي واتساب.vcf",
+
+    "directories": {
+        "ads": "temp_files/ads",
+        "group_replies": "temp_files/group_replies",
+        "random_replies": "temp_files/random_replies"
     }
 }
 
-# ============ حالات المحادثة ============
-# تعريف جميع حالات المحادثة المطلوبة
+
+# ================= CONVERSATION STATES =================
+
 (
     ADD_ACCOUNT,
     ADD_AD_TYPE,
@@ -69,218 +80,170 @@ FILE_SETTINGS = {
     ADD_GROUP_PHOTO
 ) = range(11)
 
-# تعريف حالات إضافية لاستخدامات خاصة
-# هذه الحالات تستخدم في محادثات إضافية
+
 ADD_GROUP_TEXT_REPLY = 20
 ADD_GROUP_PHOTO_REPLY = 21
 ADD_GROUP_PHOTO_MEDIA = 22
 ADD_RANDOM_MEDIA = 23
 
-# أو يمكن تعريفها بالتسلسل:
-# (
-#     ADD_ACCOUNT,
-#     ADD_AD_TYPE,
-#     ADD_AD_TEXT,
-#     ADD_AD_MEDIA,
-#     ADD_GROUP,
-#     ADD_PRIVATE_REPLY,
-#     ADD_ADMIN,
-#     ADD_RANDOM_REPLY,
-#     ADD_PRIVATE_TEXT,
-#     ADD_GROUP_TEXT,
-#     ADD_GROUP_PHOTO,
-#     ADD_GROUP_TEXT_REPLY,
-#     ADD_GROUP_PHOTO_REPLY,
-#     ADD_GROUP_PHOTO_MEDIA,
-#     ADD_RANDOM_MEDIA
-# ) = range(15)
 
-# ============ أنواع الإعلانات ============
+# ================= AD TYPES =================
+
 AD_TYPES = {
-    'text': '📝 نص فقط',
-    'photo': '🖼️ صورة مع نص',
-    'contact': '📞 جهة اتصال (VCF)'
+    "text": "📝 نص فقط",
+    "photo": "🖼️ صورة مع نص",
+    "contact": "📞 جهة اتصال (VCF)"
 }
 
-# ============ حالات المجموعات ============
+
+# ================= GROUP STATUS =================
+
 GROUP_STATUS = {
-    'pending': '⏳ معلقة',
-    'joined': '✅ منضمة',
-    'failed': '❌ فشل'
+    "pending": "⏳ معلقة",
+    "joined": "✅ منضمة",
+    "failed": "❌ فشل"
 }
 
-# ============ إعدادات السجل ============
+
+# ================= LOGGING =================
+
 LOGGING_CONFIG = {
-    'level': INFO,
-    'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    'date_format': '%Y-%m-%d %H:%M:%S',
-    'file': 'bot.log',
-    'max_size': 10 * 1024 * 1024,  # 10 MB
-    'backup_count': 5
+    "level": INFO,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "date_format": "%Y-%m-%d %H:%M:%S",
+    "file": "bot.log",
+    "max_size": 10 * 1024 * 1024,
+    "backup_count": 5
 }
 
-# ============ رسائل البوت ============
+
+# ================= MESSAGES =================
+
 MESSAGES = {
-    'start': "🚀 لوحة تحكم البوت الفعلي - الإصدار المعدل\n\n"
-             "⚡ النشر بأقصى سرعة مع تأمين الحسابات\n"
-             "⚡ تأخير 60 ثانية بين نشر القروبات\n"
-             "⚡ الردود التلقائية بأقصى سرعة\n"
-             "⚡ الانضمام للمجموعات بأقصى سرعة\n\n"
-             "👑 المالك الوحيد: الآيدي 8148890042\n\n"
-             "اختر الإجراء الذي تريد تنفيذه:",
-    
-    'unauthorized': "❌ ليس لديك صلاحية للوصول إلى هذا البوت.",
-    
-    'owner_only': "❌ فقط المالك الرئيسي ({}) يستطيع تنفيذ هذا الأمر!",
-    
-    'no_accounts': "❌ لا توجد حسابات نشطة! يجب إضافة حسابات أولاً.",
-    
-    'no_ads': "❌ لا توجد إعلانات! يجب إضافة إعلانات أولاً.",
-    
-    'no_replies': "❌ لا توجد ردود مضافة!",
-    
-    'no_groups': "❌ لا توجد مجموعات مضافة!",
-    
-    'no_admins': "❌ لا توجد مشرفين مضافة!",
-    
-    'ad_added': "✅ **تم حفظ الإعلان بنجاح!**\n\n"
-                "🆔 **رقم الإعلان:** `{}`\n"
-                "📝 **النوع:** {}\n"
-                "📝 **النص:** {}",
-    
-    'account_added': "✅ **تم إضافة الحساب بنجاح!**\n\n"
-                     "🆔 **رقم الحساب:** `{}`\n"
-                     "📱 **رقم الهاتف:** {}",
-    
-    'group_added': "✅ **تم إضافة المجموعة بنجاح!**\n\n"
-                   "🆔 **رقم المجموعة:** `{}`\n"
-                   "🔗 **الرابط:** {}",
-    
-    'admin_added': "✅ **تم إضافة المشرف بنجاح!**\n\n"
-                   "🆔 **رقم المشرف:** `{}`\n"
-                   "👤 **آيدي المستخدم:** {}",
+
+    "start": (
+        "🚀 لوحة تحكم البوت\n\n"
+        "⚡ نشر سريع مع حماية الحسابات\n"
+        "⚡ تأخير 60 ثانية بين القروبات\n"
+        "⚡ ردود تلقائية\n"
+        "⚡ انضمام سريع\n\n"
+        "👑 المالك: 8148890042\n\n"
+        "اختر من القائمة:"
+    ),
+
+    "unauthorized": "❌ ليس لديك صلاحية.",
+
+    "owner_only": "❌ هذا الأمر للمالك فقط!",
+
+    "no_accounts": "❌ لا توجد حسابات.",
+
+    "no_ads": "❌ لا توجد إعلانات.",
+
+    "no_replies": "❌ لا توجد ردود.",
+
+    "no_groups": "❌ لا توجد مجموعات.",
+
+    "no_admins": "❌ لا يوجد مشرفين."
 }
 
-# ============ أزرار القوائم ============
+
+# ================= BUTTONS =================
+
 BUTTONS = {
-    'main_menu': {
-        'accounts': "👥 إدارة الحسابات",
-        'ads': "📢 إدارة الإعلانات",
-        'groups': "👥 إدارة المجموعات",
-        'replies': "💬 إدارة الردود",
-        'admins': "👨‍💼 إدارة المشرفين",
-        'start_publishing': "🚀 بدء النشر",
-        'stop_publishing': "⏹️ إيقاف النشر"
+
+    "main_menu": {
+        "accounts": "👥 الحسابات",
+        "ads": "📢 الإعلانات",
+        "groups": "👥 المجموعات",
+        "replies": "💬 الردود",
+        "admins": "👨‍💼 المشرفين",
+        "start_publishing": "🚀 بدء النشر",
+        "stop_publishing": "⏹️ إيقاف النشر"
     },
-    
-    'ad_types': {
-        'text': "📝 إعلان نصي",
-        'photo': "🖼️ إعلان بصورة",
-        'contact': "📞 إعلان جهة اتصال"
+
+    "ad_types": {
+        "text": "📝 نصي",
+        "photo": "🖼️ صورة",
+        "contact": "📞 جهة اتصال"
     },
-    
-    'back': "🔙 رجوع",
-    'cancel': "❌ إلغاء"
+
+    "back": "🔙 رجوع",
+    "cancel": "❌ إلغاء"
 }
 
-# ============ إعدادات التطبيق ============
+
+# ================= APP LIMITS =================
+
 APP_SETTINGS = {
-    'max_accounts_per_admin': 10,
-    'max_ads_per_admin': 50,
-    'max_groups_per_admin': 100,
-    'max_replies_per_admin': 20,
-    'session_timeout': 3600,  # 1 ساعة
-    'cleanup_interval': 300,  # 5 دقائق
+    "max_accounts_per_admin": 10,
+    "max_ads_per_admin": 50,
+    "max_groups_per_admin": 100,
+    "max_replies_per_admin": 20,
+    "session_timeout": 3600,
+    "cleanup_interval": 300
 }
 
-# ============ وظيفة للتحقق من التوكن ============
+
+# ================= DISPLAY =================
+
+DISPLAY_SETTINGS = {
+    "truncate_length": 100,
+    "ads_per_page": 5,
+    "accounts_per_page": 5,
+    "groups_per_page": 5,
+    "admins_per_page": 5,
+    "replies_per_page": 5
+}
+
+
+# ================= FILE TYPES =================
+
+ALLOWED_FILE_TYPES = {
+    "photos": [".jpg", ".jpeg", ".png", ".gif"],
+    "documents": [".pdf", ".doc", ".docx", ".txt"],
+    "contacts": [".vcf"]
+}
+
+
+# ================= CONFIG CHECK =================
+
 def validate_config():
-    """التحقق من صحة الإعدادات"""
-    errors = []
-    
+
     if not BOT_TOKEN:
-        errors.append("❌ لم يتم تعيين BOT_TOKEN في متغيرات البيئة")
-    
-    if not OWNER_ID:
-        errors.append("❌ لم يتم تعيين OWNER_ID")
-    
-    if errors:
-        for error in errors:
-            print(error)
-        print("⚠️ يرجى إضافة BOT_TOKEN في Render.com → Environment")
+        print("❌ BOT_TOKEN غير موجود")
         return False
-    
+
+    if not OWNER_ID:
+        print("❌ OWNER_ID غير موجود")
+        return False
+
     return True
 
-# ============ وظيفة لعرض الإعدادات ============
-def print_config():
-    """عرض إعدادات البوت"""
-    print("=" * 60)
-    print("⚙️  إعدادات البوت الفعلي")
-    print("=" * 60)
-    print(f"👑 المالك: {OWNER_ID}")
-    print(f"📊 تأخير نشر القروبات: {DELAY_SETTINGS['publishing']['group_publishing_delay']} ثانية")
-    print(f"📁 اسم ملف جهات الاتصال: {FILE_SETTINGS['contact_filename']}")
-    print(f"📝 أنواع الإعلانات: {', '.join(AD_TYPES.values())}")
-    print(f"📊 الحد الأقصى للإعلانات: {APP_SETTINGS['max_ads_per_admin']}")
-    print("=" * 60)
 
-# ============ إعدادات العرض ============
-DISPLAY_SETTINGS = {
-    'truncate_length': 100,  # طول النص المختصر
-    'ads_per_page': 5,
-    'accounts_per_page': 5,
-    'groups_per_page': 5,
-    'admins_per_page': 5,
-    'replies_per_page': 5,
-}
+def prepare_folders():
 
-# ============ إعدادات الأمان ============
-SECURITY_SETTINGS = {
-    'min_password_length': 6,
-    'session_validation': True,
-    'ip_tracking': False,
-    'max_login_attempts': 3,
-    'lockout_duration': 300,  # 5 دقائق
-}
-
-# ============ أنواع الملفات المسموحة ============
-ALLOWED_FILE_TYPES = {
-    'photos': ['.jpg', '.jpeg', '.png', '.gif'],
-    'documents': ['.pdf', '.doc', '.docx', '.txt'],
-    'contacts': ['.vcf']
-}
-
-# ============ إعدادات قاعدة البيانات المتقدمة ============
-DATABASE_SETTINGS = {
-    'connection_timeout': 30,
-    'journal_mode': 'WAL',
-    'synchronous': 'NORMAL',
-    'cache_size': -2000,  # 2MB
-    'foreign_keys': True,
-    'temp_store': 'MEMORY'
-}
-
-# ============ وظيفة التحقق من الإعدادات ============
-def check_all_settings():
-    """فحص كافة الإعدادات"""
-    print_config()
-    
-    # التحقق من المجلدات
-    directories = FILE_SETTINGS['directories']
-    for name, path in directories.items():
+    for path in FILE_SETTINGS["directories"].values():
         if not os.path.exists(path):
             os.makedirs(path)
-            print(f"📁 تم إنشاء مجلد: {path}")
-    
-    # التحقق من قاعدة البيانات
-    if not os.path.exists(DB_NAME):
-        print(f"📊 قاعدة البيانات '{DB_NAME}' سيتم إنشاؤها تلقائياً")
-    
-    return True
 
-# ============ بدء التشغيل ============
+
+def print_config():
+
+    print("=" * 50)
+    print("⚙️ إعدادات البوت")
+    print("=" * 50)
+    print("👑 المالك:", OWNER_ID)
+    print("📊 تأخير القروبات:", DELAY_SETTINGS["publishing"]["group_publishing_delay"])
+    print("📁 ملف الاتصال:", FILE_SETTINGS["contact_filename"])
+    print("=" * 50)
+
+
 if __name__ == "__main__":
-    # عند تشغيل الملف مباشرة، عرض الإعدادات
+
     print_config()
-    print("✅ ملف الإعدادات جاهز للاستخدام")
+    prepare_folders()
+
+    if validate_config():
+        print("✅ الإعدادات سليمة")
+    else:
+        print("⚠️ يوجد خطأ في الإعدادات")
