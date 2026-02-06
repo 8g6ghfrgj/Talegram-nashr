@@ -2,7 +2,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from config import ADD_GROUP, GROUP_STATUS, MESSAGES
+from config import ADD_GROUP, MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,9 @@ class GroupHandlers:
         keyboard = [
             [InlineKeyboardButton("➕ إضافة مجموعة", callback_data="add_group")],
             [InlineKeyboardButton("📋 عرض المجموعات", callback_data="show_groups")],
+            [InlineKeyboardButton("📊 إحصائيات", callback_data="group_stats")],
             [InlineKeyboardButton("🚀 بدء الانضمام", callback_data="start_join_groups")],
             [InlineKeyboardButton("⏹️ إيقاف الانضمام", callback_data="stop_join_groups")],
-            [InlineKeyboardButton("📊 إحصائيات", callback_data="group_stats")],
             [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]
         ]
 
@@ -57,8 +57,13 @@ class GroupHandlers:
 
         context.user_data.clear()
 
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_process")]
+        ]
+
         await query.edit_message_text(
-            "🔗 أرسل رابط المجموعة أو القناة:"
+            "🔗 أرسل رابط المجموعة الآن:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
         return ADD_GROUP
@@ -76,7 +81,7 @@ class GroupHandlers:
         link = message.text.strip()
 
         if not link.startswith("http"):
-            await message.reply_text("❌ الرابط غير صالح")
+            await message.reply_text("❌ الرابط غير صحيح")
             return ADD_GROUP
 
         success, msg = self.db.add_group(user_id, link)
@@ -105,23 +110,28 @@ class GroupHandlers:
             await query.edit_message_text("❌ لا توجد مجموعات")
             return
 
-        text = "👥 المجموعات:\n\n"
+        text = "👥 المجموعات المضافة:\n\n"
         keyboard = []
 
         for group in groups[:15]:
 
-            group_id, link, status, added, _ = group
+            # DB schema:
+            # id, admin_id, link, status, added
+            group_id, admin_id, link, status, added = group
 
-            status_label = GROUP_STATUS.get(status, status)
+            status_icon = {
+                "pending": "⏳",
+                "joined": "✅",
+                "failed": "❌"
+            }.get(status, "❔")
 
-            text += f"#{group_id}\n"
+            text += f"#{group_id} {status_icon}\n"
             text += f"{link}\n"
-            text += f"{status_label}\n"
-            text += f"{added[:16]}\n──────────\n"
+            text += f"{added}\n──────────\n"
 
             keyboard.append([
                 InlineKeyboardButton(
-                    f"🗑 حذف #{group_id}",
+                    "🗑 حذف",
                     callback_data=f"delete_group_{group_id}"
                 )
             ])
@@ -147,11 +157,46 @@ class GroupHandlers:
         user_id = query.from_user.id
 
         if self.db.delete_group(group_id, user_id):
-            await query.answer("✅ تم الحذف")
+            await query.answer("✅ تم حذف المجموعة")
         else:
             await query.answer("❌ فشل الحذف")
 
         await self.show_groups(update, context)
+
+
+    # ==================================================
+    # GROUP STATS
+    # ==================================================
+
+    async def show_group_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        query = update.callback_query
+        user_id = query.from_user.id
+
+        groups = self.db.get_groups(user_id)
+
+        total = len(groups)
+        joined = len([g for g in groups if g[3] == "joined"])
+        pending = len([g for g in groups if g[3] == "pending"])
+        failed = len([g for g in groups if g[3] == "failed"])
+
+        text = (
+            "📊 إحصائيات المجموعات\n\n"
+            f"👥 الإجمالي: {total}\n"
+            f"✅ المنضمة: {joined}\n"
+            f"⏳ المعلقة: {pending}\n"
+            f"❌ الفاشلة: {failed}"
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("🔄 تحديث", callback_data="group_stats")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_groups")]
+        ]
+
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 
     # ==================================================
@@ -164,9 +209,9 @@ class GroupHandlers:
         user_id = query.from_user.id
 
         if self.manager.start_join_groups(user_id):
-            await query.edit_message_text("🚀 بدأ الانضمام إلى المجموعات")
+            await query.edit_message_text("🚀 بدأ الانضمام للمجموعات")
         else:
-            await query.edit_message_text("⚠️ عملية الانضمام تعمل بالفعل")
+            await query.edit_message_text("⚠️ الانضمام يعمل بالفعل")
 
 
     # ==================================================
@@ -182,39 +227,3 @@ class GroupHandlers:
             await query.edit_message_text("⏹️ تم إيقاف الانضمام")
         else:
             await query.edit_message_text("⚠️ الانضمام غير نشط")
-
-
-    # ==================================================
-    # GROUP STATS
-    # ==================================================
-
-    async def show_group_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-        query = update.callback_query
-        user_id = query.from_user.id
-
-        groups = self.db.get_groups(user_id)
-
-        total = len(groups)
-
-        pending = len([g for g in groups if g[2] == "pending"])
-        joined = len([g for g in groups if g[2] == "joined"])
-        failed = len([g for g in groups if g[2] == "failed"])
-
-        text = (
-            "📊 إحصائيات المجموعات\n\n"
-            f"👥 الإجمالي: {total}\n"
-            f"⏳ معلقة: {pending}\n"
-            f"✅ منضمة: {joined}\n"
-            f"❌ فشل: {failed}"
-        )
-
-        keyboard = [
-            [InlineKeyboardButton("🔄 تحديث", callback_data="group_stats")],
-            [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_groups")]
-        ]
-
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
