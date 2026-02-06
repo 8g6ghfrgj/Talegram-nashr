@@ -1,14 +1,6 @@
 import asyncio
-import os
-import random
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional
-
-from telethon import TelegramClient, errors
-from telethon.sessions import StringSession
-from telethon.tl.functions.channels import JoinChannelRequest
-from telethon.tl.functions.messages import ImportChatInviteRequest
+import random
 
 from config import DELAY_SETTINGS
 
@@ -16,377 +8,275 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramBotManager:
+
     def __init__(self, db):
         self.db = db
 
-        self.delay = DELAY_SETTINGS
+        # حالات التشغيل لكل مشرف
+        self.publishing_tasks = {}
+        self.join_tasks = {}
 
-        # حالات المهام
-        self.publishing_active = {}
-        self.private_reply_active = {}
-        self.group_reply_active = {}
-        self.random_reply_active = {}
-        self.join_groups_active = {}
-
-        # المهام
-        self.tasks = {}
-
-        # الكاش
-        self.clients: Dict[str, TelegramClient] = {}
-
-        # إحصائيات
-        self.stats = {
-            "publish": 0,
-            "reply": 0,
-            "join": 0,
-            "errors": 0,
-            "last_activity": datetime.now()
-        }
-
-        logger.info("✅ TelegramBotManager جاهز")
+        self.private_reply_tasks = {}
+        self.random_reply_tasks = {}
 
 
-    # ================= CLIENT =================
-
-    async def get_client(self, session: str) -> Optional[TelegramClient]:
-
-        if session in self.clients:
-            return self.clients[session]
-
-        try:
-            client = TelegramClient(StringSession(session), 1, "x")
-            await client.connect()
-
-            if not await client.is_user_authorized():
-                await client.disconnect()
-                return None
-
-            self.clients[session] = client
-            return client
-
-        except Exception as e:
-            logger.error(f"❌ فشل إنشاء الجلسة: {e}")
-            return None
-
-
-    async def close_client(self, session: str):
-
-        if session in self.clients:
-            try:
-                await self.clients[session].disconnect()
-            except:
-                pass
-            del self.clients[session]
-
-
-    async def cleanup_all(self):
-
-        for s in list(self.clients.keys()):
-            await self.close_client(s)
-
-
-    # ================= نشر =================
-
-    async def publishing_task(self, admin_id):
-
-        logger.info(f"🚀 بدأ النشر للمشرف {admin_id}")
-
-        while self.publishing_active.get(admin_id):
-
-            try:
-                self.stats["last_activity"] = datetime.now()
-
-                accounts = self.db.get_active_publishing_accounts(admin_id)
-                ads = self.db.get_ads(admin_id)
-
-                if not accounts or not ads:
-                    await asyncio.sleep(self.delay["publishing"]["between_cycles"])
-                    continue
-
-                for acc in accounts:
-
-                    if not self.publishing_active.get(admin_id):
-                        break
-
-                    acc_id, session, name, username = acc
-
-                    client = await self.get_client(session)
-                    if not client:
-                        continue
-
-                    try:
-                        dialogs = await client.get_dialogs(limit=50)
-                    except:
-                        continue
-
-                    groups = [d for d in dialogs if d.is_group or d.is_channel]
-
-                    for dialog in groups:
-
-                        if not self.publishing_active.get(admin_id):
-                            break
-
-                        for ad in ads:
-
-                            try:
-                                ad_id, ad_type, text, media, *_ = ad
-
-                                if ad_type == "text":
-                                    await client.send_message(dialog.id, text)
-
-                                elif ad_type == "photo" and media and os.path.exists(media):
-                                    await client.send_file(dialog.id, media, caption=text)
-
-                                elif ad_type == "contact" and media and os.path.exists(media):
-                                    await client.send_file(dialog.id, media)
-
-                                self.stats["publish"] += 1
-                                self.db.update_account_activity(acc_id)
-
-                                await asyncio.sleep(self.delay["publishing"]["between_ads"])
-
-                            except errors.FloodWaitError as e:
-                                await asyncio.sleep(e.seconds + 1)
-
-                            except Exception:
-                                self.stats["errors"] += 1
-
-                        await asyncio.sleep(
-                            self.delay["publishing"]["group_publishing_delay"]
-                        )
-
-                await asyncio.sleep(self.delay["publishing"]["between_cycles"])
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"❌ خطأ نشر: {e}")
-                await asyncio.sleep(5)
-
-        logger.info(f"⏹️ توقف النشر {admin_id}")
-
+    # ==================================================
+    # PUBLISHING ADS
+    # ==================================================
 
     def start_publishing(self, admin_id):
 
-        if self.publishing_active.get(admin_id):
+        if admin_id in self.publishing_tasks:
             return False
 
-        self.publishing_active[admin_id] = True
-        self.tasks[f"publish_{admin_id}"] = asyncio.create_task(
-            self.publishing_task(admin_id)
+        task = asyncio.create_task(
+            self._publishing_loop(admin_id)
         )
 
+        self.publishing_tasks[admin_id] = task
         return True
 
 
     def stop_publishing(self, admin_id):
 
-        self.publishing_active[admin_id] = False
+        task = self.publishing_tasks.pop(admin_id, None)
 
-        task = self.tasks.pop(f"publish_{admin_id}", None)
         if task:
             task.cancel()
+            return True
 
-        return True
+        return False
 
 
-    # ================= رد خاص =================
+    async def _publishing_loop(self, admin_id):
 
-    async def private_reply_task(self, admin_id):
+        logger.info(f"Start publishing for admin {admin_id}")
 
-        while self.private_reply_active.get(admin_id):
+        while True:
 
             try:
-                accounts = self.db.get_active_publishing_accounts(admin_id)
-                replies = self.db.get_private_replies(admin_id)
+                accounts = self.db.get_accounts(admin_id)
+                ads = self.db.get_ads(admin_id)
+                groups = self.db.get_groups(admin_id)
 
-                if not accounts or not replies:
-                    await asyncio.sleep(self.delay["private_reply"]["between_cycles"])
+                active_accounts = [a for a in accounts if a[2]]
+                joined_groups = [g for g in groups if g[2] == "joined"]
+
+                if not active_accounts or not ads or not joined_groups:
+                    await asyncio.sleep(10)
                     continue
 
-                for acc in accounts:
+                random.shuffle(active_accounts)
+                random.shuffle(ads)
 
-                    if not self.private_reply_active.get(admin_id):
-                        break
+                for account in active_accounts:
 
-                    acc_id, session, *_ = acc
+                    for ad in ads:
 
-                    client = await self.get_client(session)
-                    if not client:
-                        continue
+                        for group in joined_groups:
 
-                    msgs = await client.get_messages(None, limit=5)
-
-                    for msg in msgs:
-                        if msg.is_private and not msg.out:
-
-                            reply = random.choice(replies)[1]
-
-                            try:
-                                await client.send_message(msg.sender_id, reply)
-                                self.stats["reply"] += 1
-                                self.db.update_account_activity(acc_id)
-
-                            except:
-                                pass
-
-                            await asyncio.sleep(
-                                self.delay["private_reply"]["between_replies"]
+                            # هنا لاحقاً يتم إرسال الإعلان الحقيقي عبر تيليجرام API
+                            logger.info(
+                                f"[PUBLISH] acc:{account[0]} -> group:{group[0]} -> ad:{ad[0]}"
                             )
 
-                await asyncio.sleep(self.delay["private_reply"]["between_cycles"])
-
-            except asyncio.CancelledError:
-                break
-            except:
-                await asyncio.sleep(3)
-
-
-    def start_private_reply(self, admin_id):
-
-        if self.private_reply_active.get(admin_id):
-            return False
-
-        self.private_reply_active[admin_id] = True
-        self.tasks[f"private_{admin_id}"] = asyncio.create_task(
-            self.private_reply_task(admin_id)
-        )
-
-        return True
-
-
-    def stop_private_reply(self, admin_id):
-
-        self.private_reply_active[admin_id] = False
-
-        task = self.tasks.pop(f"private_{admin_id}", None)
-        if task:
-            task.cancel()
-
-        return True
-
-
-    # ================= الانضمام =================
-
-    async def join_groups_task(self, admin_id):
-
-        while self.join_groups_active.get(admin_id):
-
-            try:
-                accounts = self.db.get_active_publishing_accounts(admin_id)
-                groups = self.db.get_groups(admin_id, status="pending")
-
-                if not accounts or not groups:
-                    await asyncio.sleep(self.delay["join_groups"]["between_cycles"])
-                    continue
-
-                for acc in accounts:
-
-                    if not self.join_groups_active.get(admin_id):
-                        break
-
-                    acc_id, session, name, _ = acc
-
-                    client = await self.get_client(session)
-                    if not client:
-                        continue
-
-                    for g in groups[:5]:
-
-                        gid, link, *_ = g
-
-                        ok = await self.join_one(client, link)
-
-                        if ok:
-                            self.db.update_group_status(gid, "joined")
-                            self.stats["join"] += 1
-                        else:
-                            self.db.update_group_status(gid, "failed")
+                            await asyncio.sleep(
+                                DELAY_SETTINGS["publishing"]["between_groups"]
+                            )
 
                         await asyncio.sleep(
-                            self.delay["join_groups"]["between_links"]
+                            DELAY_SETTINGS["publishing"]["between_ads"]
                         )
 
-                    await self.close_client(session)
-
-                await asyncio.sleep(self.delay["join_groups"]["between_cycles"])
+                await asyncio.sleep(
+                    DELAY_SETTINGS["publishing"]["between_cycles"]
+                )
 
             except asyncio.CancelledError:
+                logger.info(f"Publishing stopped for admin {admin_id}")
                 break
-            except:
+
+            except Exception as e:
+                logger.exception(e)
                 await asyncio.sleep(5)
 
 
-    async def join_one(self, client, link):
-
-        try:
-            clean = link.replace("https://", "").replace("t.me/", "")
-
-            if clean.startswith("+") or "joinchat" in clean:
-                code = clean.split("/")[-1].replace("+", "")
-                await client(ImportChatInviteRequest(code))
-                return True
-
-            if clean.startswith("@"):
-                clean = clean[1:]
-
-            await client(JoinChannelRequest(f"@{clean}"))
-            return True
-
-        except errors.UserAlreadyParticipantError:
-            return True
-
-        except:
-            return False
-
+    # ==================================================
+    # JOIN GROUPS
+    # ==================================================
 
     def start_join_groups(self, admin_id):
 
-        if self.join_groups_active.get(admin_id):
+        if admin_id in self.join_tasks:
             return False
 
-        self.join_groups_active[admin_id] = True
-        self.tasks[f"join_{admin_id}"] = asyncio.create_task(
-            self.join_groups_task(admin_id)
+        task = asyncio.create_task(
+            self._join_groups_loop(admin_id)
         )
 
+        self.join_tasks[admin_id] = task
         return True
 
 
     def stop_join_groups(self, admin_id):
 
-        self.join_groups_active[admin_id] = False
+        task = self.join_tasks.pop(admin_id, None)
 
-        task = self.tasks.pop(f"join_{admin_id}", None)
         if task:
             task.cancel()
+            return True
 
+        return False
+
+
+    async def _join_groups_loop(self, admin_id):
+
+        logger.info(f"Start joining groups for admin {admin_id}")
+
+        while True:
+
+            try:
+                accounts = self.db.get_accounts(admin_id)
+                groups = self.db.get_groups(admin_id)
+
+                active_accounts = [a for a in accounts if a[2]]
+                pending_groups = [g for g in groups if g[2] == "pending"]
+
+                if not active_accounts or not pending_groups:
+                    await asyncio.sleep(10)
+                    continue
+
+                for group in pending_groups:
+
+                    for account in active_accounts:
+
+                        # هنا لاحقاً تنفيذ الانضمام الحقيقي
+                        logger.info(
+                            f"[JOIN] acc:{account[0]} -> group:{group[0]}"
+                        )
+
+                        await asyncio.sleep(
+                            DELAY_SETTINGS["join_groups"]["between_links"]
+                        )
+
+                await asyncio.sleep(
+                    DELAY_SETTINGS["join_groups"]["between_cycles"]
+                )
+
+            except asyncio.CancelledError:
+                logger.info(f"Join stopped for admin {admin_id}")
+                break
+
+            except Exception as e:
+                logger.exception(e)
+                await asyncio.sleep(5)
+
+
+    # ==================================================
+    # PRIVATE REPLIES LOOP (OPTIONAL)
+    # ==================================================
+
+    def start_private_replies(self, admin_id):
+
+        if admin_id in self.private_reply_tasks:
+            return False
+
+        task = asyncio.create_task(
+            self._private_reply_loop(admin_id)
+        )
+
+        self.private_reply_tasks[admin_id] = task
         return True
 
 
-    # ================= إحصائيات =================
+    def stop_private_replies(self, admin_id):
 
-    def get_stats(self) -> Dict[str, Any]:
+        task = self.private_reply_tasks.pop(admin_id, None)
 
-        return {
-            "publish": self.stats["publish"],
-            "reply": self.stats["reply"],
-            "join": self.stats["join"],
-            "errors": self.stats["errors"],
-            "last_activity": self.stats["last_activity"].isoformat(),
-            "active": {
-                "publishing": sum(self.publishing_active.values()),
-                "private_reply": sum(self.private_reply_active.values()),
-                "join_groups": sum(self.join_groups_active.values())
-            },
-            "cached_clients": len(self.clients)
-        }
+        if task:
+            task.cancel()
+            return True
+
+        return False
 
 
-    async def stop_all(self, admin_id):
+    async def _private_reply_loop(self, admin_id):
 
-        self.stop_publishing(admin_id)
-        self.stop_private_reply(admin_id)
-        self.stop_join_groups(admin_id)
+        while True:
+            try:
+                replies = self.db.get_private_replies(admin_id)
 
-        await asyncio.sleep(1)
+                if not replies:
+                    await asyncio.sleep(5)
+                    continue
+
+                for reply in replies:
+                    logger.info(f"[PRIVATE REPLY] {reply[0]}")
+                    await asyncio.sleep(
+                        DELAY_SETTINGS["private_reply"]["between_replies"]
+                    )
+
+                await asyncio.sleep(
+                    DELAY_SETTINGS["private_reply"]["between_cycles"]
+                )
+
+            except asyncio.CancelledError:
+                break
+
+            except Exception as e:
+                logger.exception(e)
+                await asyncio.sleep(5)
+
+
+    # ==================================================
+    # RANDOM REPLIES LOOP (OPTIONAL)
+    # ==================================================
+
+    def start_random_replies(self, admin_id):
+
+        if admin_id in self.random_reply_tasks:
+            return False
+
+        task = asyncio.create_task(
+            self._random_reply_loop(admin_id)
+        )
+
+        self.random_reply_tasks[admin_id] = task
+        return True
+
+
+    def stop_random_replies(self, admin_id):
+
+        task = self.random_reply_tasks.pop(admin_id, None)
+
+        if task:
+            task.cancel()
+            return True
+
+        return False
+
+
+    async def _random_reply_loop(self, admin_id):
+
+        while True:
+            try:
+                replies = self.db.get_random_replies(admin_id)
+
+                if not replies:
+                    await asyncio.sleep(5)
+                    continue
+
+                reply = random.choice(replies)
+
+                logger.info(f"[RANDOM REPLY] {reply[0]}")
+
+                await asyncio.sleep(
+                    DELAY_SETTINGS["random_reply"]["between_replies"]
+                )
+
+            except asyncio.CancelledError:
+                break
+
+            except Exception as e:
+                logger.exception(e)
+                await asyncio.sleep(5)
