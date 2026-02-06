@@ -54,7 +54,7 @@ class ConversationHandlers:
         data = query.data
         user_id = query.from_user.id
 
-        # تجاهل callbacks الخاصة بالمحادثات
+        # تجاهل callbacks الخاصة بالمحادثات (حتى لا يحصل تعارض)
         if data.startswith("ad_type_"):
             return
 
@@ -62,7 +62,7 @@ class ConversationHandlers:
             await query.edit_message_text("❌ ليس لديك صلاحية.")
             return
 
-        logger.info(f"BUTTON => {data}")
+        logger.info(f"CALLBACK => {data}")
 
         try:
 
@@ -265,7 +265,6 @@ class ConversationHandlers:
     def setup_conversation_handlers(self, application):
 
         # ===== ADD ACCOUNT =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -287,7 +286,6 @@ class ConversationHandlers:
         )
 
         # ===== ADD AD =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -321,7 +319,6 @@ class ConversationHandlers:
         )
 
         # ===== ADD GROUP =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -343,7 +340,6 @@ class ConversationHandlers:
         )
 
         # ===== ADD ADMIN =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -365,7 +361,6 @@ class ConversationHandlers:
         )
 
         # ===== PRIVATE REPLY =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -387,7 +382,6 @@ class ConversationHandlers:
         )
 
         # ===== RANDOM REPLY =====
-
         application.add_handler(
             ConversationHandler(
                 entry_points=[
@@ -412,8 +406,7 @@ class ConversationHandlers:
             )
         )
 
-        # ===== MAIN ROUTER =====
-
+        # ===== MAIN CALLBACK ROUTER (ONE ONLY) =====
         application.add_handler(
             CallbackQueryHandler(self.handle_callback)
         )
