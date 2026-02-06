@@ -1,6 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
+
 from config import ADD_ACCOUNT, MESSAGES
 
 logger = logging.getLogger(__name__)
@@ -12,19 +13,23 @@ class AccountHandlers:
         self.db = db
         self.manager = manager
 
+
     # ==================================================
-    # MAIN MENU
+    # ACCOUNTS MENU
     # ==================================================
 
-    async def manage_accounts(self, query, context):
+    async def manage_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        if not self.db.is_admin(query.from_user.id):
+        query = update.callback_query
+        user_id = query.from_user.id
+
+        if not self.db.is_admin(user_id):
             await query.edit_message_text(MESSAGES["unauthorized"])
             return
 
         keyboard = [
             [InlineKeyboardButton("➕ إضافة حساب", callback_data="add_account")],
-            [InlineKeyboardButton("👥 عرض الحسابات", callback_data="show_accounts")],
+            [InlineKeyboardButton("📋 عرض الحسابات", callback_data="show_accounts")],
             [InlineKeyboardButton("📊 إحصائيات", callback_data="account_stats")],
             [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_main")]
         ]
@@ -34,122 +39,91 @@ class AccountHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+
     # ==================================================
-    # ADD ACCOUNT
+    # START ADD ACCOUNT
     # ==================================================
 
     async def add_account_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        if not self.db.is_admin(update.callback_query.from_user.id):
-            await update.callback_query.edit_message_text(MESSAGES["unauthorized"])
+        query = update.callback_query
+        user_id = query.from_user.id
+
+        if not self.db.is_admin(user_id):
+            await query.edit_message_text(MESSAGES["unauthorized"])
             return ConversationHandler.END
 
-        await update.callback_query.edit_message_text(
-            "أرسل Session String للحساب:"
+        context.user_data.clear()
+
+        await query.edit_message_text(
+            "📥 أرسل جلسة الحساب أو بيانات الدخول:"
         )
 
         return ADD_ACCOUNT
 
+
+    # ==================================================
+    # ADD ACCOUNT SESSION
+    # ==================================================
+
     async def add_account_session(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        if not self.db.is_admin(update.message.from_user.id):
-            await update.message.reply_text(MESSAGES["unauthorized"])
-            return ConversationHandler.END
+        message = update.message
+        user_id = message.from_user.id
 
-        session_string = update.message.text.strip()
+        session_data = message.text.strip()
 
-        if len(session_string) < 100:
-            await update.message.reply_text("❌ كود الجلسة غير صحيح")
+        if len(session_data) < 5:
+            await message.reply_text("❌ البيانات غير صالحة")
             return ADD_ACCOUNT
 
-        await update.message.reply_text("⏳ جاري اختبار الجلسة...")
+        success, msg = self.db.add_account(user_id, session_data)
 
-        try:
-            from telethon import TelegramClient
-            from telethon.sessions import StringSession
+        if success:
+            await message.reply_text("✅ تم إضافة الحساب بنجاح")
+        else:
+            await message.reply_text(f"❌ {msg}")
 
-            client = TelegramClient(StringSession(session_string), 1, "b")
-            await client.connect()
+        context.user_data.clear()
+        return ConversationHandler.END
 
-            if not await client.is_user_authorized():
-                await client.disconnect()
-                await update.message.reply_text("❌ الجلسة غير صالحة")
-                return ADD_ACCOUNT
-
-            me = await client.get_me()
-            await client.disconnect()
-
-            phone = me.phone or "غير معروف"
-            name = f"{me.first_name} {me.last_name}" if me.last_name else me.first_name
-            username = f"@{me.username}" if me.username else "لا يوجد"
-
-            success, message = self.db.add_account(
-                session_string,
-                phone,
-                name,
-                username,
-                update.message.from_user.id
-            )
-
-            if success:
-                keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="back_to_accounts")]]
-
-                await update.message.reply_text(
-                    f"✅ {message}\n\n"
-                    f"الاسم: {name}\n"
-                    f"الهاتف: {phone}\n"
-                    f"المستخدم: {username}",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-            else:
-                await update.message.reply_text(f"❌ {message}")
-
-            return ConversationHandler.END
-
-        except Exception as e:
-            logger.error(e)
-            await update.message.reply_text("❌ خطأ في الجلسة")
-            return ADD_ACCOUNT
 
     # ==================================================
     # SHOW ACCOUNTS
     # ==================================================
 
-    async def show_accounts(self, query, context):
+    async def show_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        accounts = self.db.get_accounts(query.from_user.id)
+        query = update.callback_query
+        user_id = query.from_user.id
+
+        accounts = self.db.get_accounts(user_id)
 
         if not accounts:
             await query.edit_message_text("❌ لا توجد حسابات")
             return
 
-        stats = self.db.get_statistics(query.from_user.id)
-
-        text = f"👥 الحسابات ({stats['accounts']['active']}/{stats['accounts']['total']} نشطة)\n\n"
+        text = "👥 الحسابات:\n\n"
         keyboard = []
 
-        for acc in accounts[:20]:
+        for acc in accounts[:15]:
 
-            acc_id, session, phone, name, username, is_active, added, status, last_pub = acc
+            acc_id, session, status, added, _ = acc
 
-            emoji = "🟢" if is_active else "🔴"
+            status_icon = "✅" if status else "⛔"
 
-            text += (
-                f"#{acc_id} - {name}\n"
-                f"{emoji} {phone}\n"
-                f"{username}\n"
-            )
-
-            if last_pub:
-                text += f"آخر نشر: {last_pub[:16]}\n"
-
-            text += "────────────\n"
+            text += f"#{acc_id} {status_icon}\n"
+            text += f"{session[:30]}...\n"
+            text += f"{added[:16]}\n──────────\n"
 
             keyboard.append([
-                InlineKeyboardButton(f"🗑️ حذف #{acc_id}", callback_data=f"delete_account_{acc_id}"),
                 InlineKeyboardButton(
-                    "⏸️ إيقاف" if is_active else "▶️ تشغيل",
+                    f"{'⛔ تعطيل' if status else '✅ تفعيل'} #{acc_id}",
                     callback_data=f"toggle_account_{acc_id}"
+                ),
+                InlineKeyboardButton(
+                    f"🗑 حذف #{acc_id}",
+                    callback_data=f"delete_account_{acc_id}"
                 )
             ])
 
@@ -163,59 +137,61 @@ class AccountHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+
     # ==================================================
     # DELETE ACCOUNT
     # ==================================================
 
-    async def delete_account(self, query, context, account_id):
+    async def delete_account(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: int):
 
-        if not self.db.is_admin(query.from_user.id):
-            await query.edit_message_text(MESSAGES["unauthorized"])
-            return
+        query = update.callback_query
+        user_id = query.from_user.id
 
-        if self.db.delete_account(account_id, query.from_user.id):
-            await query.edit_message_text("✅ تم حذف الحساب")
+        if self.db.delete_account(account_id, user_id):
+            await query.answer("✅ تم الحذف")
         else:
-            await query.edit_message_text("❌ فشل حذف الحساب")
+            await query.answer("❌ فشل الحذف")
 
-        await self.show_accounts(query, context)
+        await self.show_accounts(update, context)
+
 
     # ==================================================
-    # TOGGLE ACCOUNT
+    # TOGGLE ACCOUNT STATUS
     # ==================================================
 
-    async def toggle_account_status(self, query, context, account_id):
+    async def toggle_account_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE, account_id: int):
 
-        if not self.db.is_admin(query.from_user.id):
-            await query.edit_message_text(MESSAGES["unauthorized"])
-            return
+        query = update.callback_query
+        user_id = query.from_user.id
 
-        if self.db.toggle_account_status(account_id, query.from_user.id):
-            await query.edit_message_text("✅ تم تغيير حالة الحساب")
+        if self.db.toggle_account_status(account_id, user_id):
+            await query.answer("🔁 تم التغيير")
         else:
-            await query.edit_message_text("❌ فشل تغيير الحالة")
+            await query.answer("❌ فشل التغيير")
 
-        await self.show_accounts(query, context)
+        await self.show_accounts(update, context)
+
 
     # ==================================================
     # STATS
     # ==================================================
 
-    async def show_account_stats(self, query, context):
+    async def show_account_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-        if not self.db.is_admin(query.from_user.id):
-            await query.edit_message_text(MESSAGES["unauthorized"])
-            return
+        query = update.callback_query
+        user_id = query.from_user.id
 
-        stats = self.db.get_statistics(query.from_user.id)
+        accounts = self.db.get_accounts(user_id)
+
+        total = len(accounts)
+        active = len([a for a in accounts if a[2]])
+        inactive = total - active
 
         text = (
             "📊 إحصائيات الحسابات\n\n"
-            f"الإجمالي: {stats['accounts']['total']}\n"
-            f"النشطة: {stats['accounts']['active']}\n"
-            f"غير النشطة: {stats['accounts']['total'] - stats['accounts']['active']}\n\n"
-            f"الإعلانات: {stats['ads']}\n"
-            f"المجموعات: {stats['groups']['total']}"
+            f"👥 الإجمالي: {total}\n"
+            f"✅ النشطة: {active}\n"
+            f"⛔ المعطلة: {inactive}"
         )
 
         keyboard = [
