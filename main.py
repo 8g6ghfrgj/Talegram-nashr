@@ -1,32 +1,21 @@
 import sys
-import os
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
+    CallbackQueryHandler,
     MessageHandler,
     ConversationHandler,
     ContextTypes,
     filters
 )
 
-# ================= PATH FIX (Render Safe) =================
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
-
-# ================= CONFIG =================
-
 from config import BOT_TOKEN, OWNER_ID, MESSAGES
-
-# ================= CORE =================
 
 from database.database import BotDatabase
 from managers.telegram_manager import TelegramBotManager
-
-# ================= HANDLERS =================
 
 from handlers.account_handlers import AccountHandlers
 from handlers.ad_handlers import AdHandlers
@@ -36,7 +25,9 @@ from handlers.admin_handlers import AdminHandlers
 from handlers.conversation_handlers import ConversationHandlers
 
 
-# ================= LOGGING =================
+# ==================================================
+# LOGGING
+# ==================================================
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,13 +49,13 @@ class MainBot:
             print("❌ BOT_TOKEN غير موجود")
             sys.exit(1)
 
-        # ===== Database =====
-        self.db = BotDatabase()
+        # ================= DATABASE + MANAGER =================
 
-        # ===== Manager =====
+        self.db = BotDatabase()
         self.manager = TelegramBotManager(self.db)
 
-        # ===== Handlers =====
+        # ================= HANDLERS =================
+
         self.account_handlers = AccountHandlers(self.db, self.manager)
         self.ad_handlers = AdHandlers(self.db, self.manager)
         self.group_handlers = GroupHandlers(self.db, self.manager)
@@ -81,22 +72,24 @@ class MainBot:
             self.reply_handlers
         )
 
-        # ===== Telegram Application =====
+        # ================= APPLICATION =================
+
         self.app = Application.builder().token(BOT_TOKEN).build()
 
         self.setup_handlers()
 
-        # ===== Add owner as admin automatically =====
+        # ================= ADD OWNER AUTO =================
+
         self.db.add_admin(
             OWNER_ID,
-            "@owner",
+            "owner",
             "المالك الرئيسي",
             True
         )
 
 
     # ==================================================
-    # START
+    # START COMMAND
     # ==================================================
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -113,6 +106,7 @@ class MainBot:
             [InlineKeyboardButton("👥 إدارة المجموعات", callback_data="manage_groups")],
             [InlineKeyboardButton("💬 إدارة الردود", callback_data="manage_replies")],
             [InlineKeyboardButton("👨‍💼 إدارة المشرفين", callback_data="manage_admins")],
+            [InlineKeyboardButton("⏱ ضبط وقت النشر", callback_data="set_publish_delay")],
             [InlineKeyboardButton("🚀 بدء النشر", callback_data="start_publishing")],
             [InlineKeyboardButton("⏹️ إيقاف النشر", callback_data="stop_publishing")]
         ]
@@ -124,7 +118,7 @@ class MainBot:
 
 
     # ==================================================
-    # CANCEL
+    # CANCEL COMMAND
     # ==================================================
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,29 +135,7 @@ class MainBot:
 
 
     # ==================================================
-    # SETUP HANDLERS
-    # ==================================================
-
-    def setup_handlers(self):
-
-        # Commands
-        self.app.add_handler(CommandHandler("start", self.start))
-        self.app.add_handler(CommandHandler("cancel", self.cancel))
-
-        # All conversations & callbacks
-        self.conversation_handlers.setup_conversation_handlers(self.app)
-
-        # Ignore random messages outside flows
-        self.app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.ignore_message)
-        )
-
-        # Errors
-        self.app.add_error_handler(self.error_handler)
-
-
-    # ==================================================
-    # IGNORE TEXT
+    # IGNORE NORMAL TEXT
     # ==================================================
 
     async def ignore_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -188,14 +160,35 @@ class MainBot:
 
 
     # ==================================================
+    # SETUP HANDLERS
+    # ==================================================
+
+    def setup_handlers(self):
+
+        # ===== Commands =====
+        self.app.add_handler(CommandHandler("start", self.start))
+        self.app.add_handler(CommandHandler("cancel", self.cancel))
+
+        # ===== Conversations + callbacks =====
+        self.conversation_handlers.setup_conversation_handlers(self.app)
+
+        # ===== Ignore normal text =====
+        self.app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.ignore_message)
+        )
+
+        # ===== Errors =====
+        self.app.add_error_handler(self.error_handler)
+
+
+    # ==================================================
     # RUN
     # ==================================================
 
     def run(self):
 
         print("🚀 Bot is running...")
-        self.app.run_polling(drop_pending_updates=True)
-
+        self.app.run_polling()
 
 
 # ==================================================
@@ -203,6 +196,7 @@ class MainBot:
 # ==================================================
 
 def main():
+
     bot = MainBot()
     bot.run()
 
