@@ -11,9 +11,7 @@ class BotDatabase:
         self.create_tables()
 
 
-    # ==================================================
-    # UTILS
-    # ==================================================
+    # ================= UTILS =================
 
     def now(self):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -23,9 +21,7 @@ class BotDatabase:
         self.conn.commit()
 
 
-    # ==================================================
-    # CREATE TABLES
-    # ==================================================
+    # ================= CREATE TABLES =================
 
     def create_tables(self):
 
@@ -85,9 +81,7 @@ class BotDatabase:
         self.commit()
 
 
-    # ==================================================
-    # ADMINS
-    # ==================================================
+    # ================= ADMINS =================
 
     def is_admin(self, admin_id):
 
@@ -156,9 +150,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # ACCOUNTS
-    # ==================================================
+    # ================= ACCOUNTS =================
 
     def add_account(self, admin_id, session):
 
@@ -233,9 +225,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # ADS
-    # ==================================================
+    # ================= ADS =================
 
     def add_ad(self, ad_type, text, media, _unused, admin_id):
 
@@ -280,9 +270,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # GROUPS
-    # ==================================================
+    # ================= GROUPS =================
 
     def add_group(self, admin_id, link):
 
@@ -327,9 +315,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # PRIVATE REPLIES
-    # ==================================================
+    # ================= PRIVATE REPLIES =================
 
     def add_private_reply(self, admin_id, text):
 
@@ -374,9 +360,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # RANDOM REPLIES
-    # ==================================================
+    # ================= RANDOM REPLIES =================
 
     def add_random_reply(self, admin_id, r_type, text, media):
 
@@ -421,9 +405,7 @@ class BotDatabase:
         return True
 
 
-    # ==================================================
-    # SYSTEM STATS
-    # ==================================================
+    # ================= SYSTEM STATS =================
 
     def get_system_statistics(self):
 
