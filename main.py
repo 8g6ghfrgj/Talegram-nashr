@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -6,25 +7,29 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
     filters
 )
 
+# ===== تأكيد مسار المشروع =====
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# ===== CONFIG =====
 from config import BOT_TOKEN, OWNER_ID, MESSAGES
 
+# ===== DATABASE + MANAGER =====
 from database.database import BotDatabase
 from managers.telegram_manager import TelegramBotManager
 
-from handlers import (
-    AccountHandlers,
-    AdHandlers,
-    GroupHandlers,
-    ReplyHandlers,
-    AdminHandlers,
-    ConversationHandlers
-)
+# ===== HANDLERS (استيراد مباشر - بدون مشاكل Render) =====
+from handlers.account_handlers import AccountHandlers
+from handlers.ad_handlers import AdHandlers
+from handlers.group_handlers import GroupHandlers
+from handlers.reply_handlers import ReplyHandlers
+from handlers.admin_handlers import AdminHandlers
+from handlers.conversation_handlers import ConversationHandlers
+
 
 # ==================================================
 # LOGGING
@@ -39,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==================================================
-# MAIN BOT
+# MAIN BOT CLASS
 # ==================================================
 
 class MainBot:
@@ -50,11 +55,13 @@ class MainBot:
             print("❌ BOT_TOKEN غير موجود")
             sys.exit(1)
 
-        # Database + Manager
+        # ===== DATABASE =====
         self.db = BotDatabase()
+
+        # ===== MANAGER =====
         self.manager = TelegramBotManager(self.db)
 
-        # Handlers
+        # ===== HANDLERS =====
         self.account_handlers = AccountHandlers(self.db, self.manager)
         self.ad_handlers = AdHandlers(self.db, self.manager)
         self.group_handlers = GroupHandlers(self.db, self.manager)
@@ -71,12 +78,12 @@ class MainBot:
             self.reply_handlers
         )
 
-        # Application (PTB v20)
+        # ===== TELEGRAM APP =====
         self.app = Application.builder().token(BOT_TOKEN).build()
 
         self.setup_handlers()
 
-        # إضافة المالك تلقائياً
+        # ===== ADD OWNER AS ADMIN =====
         self.db.add_admin(
             OWNER_ID,
             "@owner",
@@ -86,7 +93,7 @@ class MainBot:
 
 
     # ==================================================
-    # START COMMAND
+    # /start
     # ==================================================
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,20 +145,20 @@ class MainBot:
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("cancel", self.cancel))
 
-        # Conversations + main router
+        # Conversations + callbacks
         self.conversation_handlers.setup_conversation_handlers(self.app)
 
-        # تجاهل أي رسالة نصية خارج المحادثات
+        # Ignore random text
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.ignore_message)
         )
 
-        # Error handler
+        # Errors
         self.app.add_error_handler(self.error_handler)
 
 
     # ==================================================
-    # IGNORE NORMAL TEXT
+    # IGNORE TEXT
     # ==================================================
 
     async def ignore_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -159,7 +166,7 @@ class MainBot:
 
 
     # ==================================================
-    # ERRORS
+    # ERROR HANDLER
     # ==================================================
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -168,9 +175,7 @@ class MainBot:
 
         if update and getattr(update, "effective_message", None):
             try:
-                await update.effective_message.reply_text(
-                    "❌ حدث خطأ في النظام"
-                )
+                await update.effective_message.reply_text("❌ حدث خطأ في النظام")
             except:
                 pass
 
@@ -185,13 +190,11 @@ class MainBot:
         self.app.run_polling()
 
 
-
 # ==================================================
 # MAIN
 # ==================================================
 
 def main():
-
     bot = MainBot()
     bot.run()
 
