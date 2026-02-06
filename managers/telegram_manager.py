@@ -12,7 +12,7 @@ class TelegramBotManager:
     def __init__(self, db):
         self.db = db
 
-        # حالات التشغيل لكل مشرف
+        # مهام التشغيل لكل مشرف
         self.publishing_tasks = {}
         self.join_tasks = {}
 
@@ -21,7 +21,7 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # PUBLISHING ADS
+    # PUBLISH ADS (SIMULATION)
     # ==================================================
 
     def start_publishing(self, admin_id):
@@ -50,17 +50,16 @@ class TelegramBotManager:
 
     async def _publishing_loop(self, admin_id):
 
-        logger.info(f"Start publishing for admin {admin_id}")
+        logger.info(f"[PUBLISH] Started for admin {admin_id}")
 
         while True:
-
             try:
                 accounts = self.db.get_accounts(admin_id)
                 ads = self.db.get_ads(admin_id)
                 groups = self.db.get_groups(admin_id)
 
-                active_accounts = [a for a in accounts if a[2]]
-                joined_groups = [g for g in groups if g[2] == "joined"]
+                active_accounts = [a for a in accounts if a[3] == 1]
+                joined_groups = [g for g in groups if g[3] == "joined"]
 
                 if not active_accounts or not ads or not joined_groups:
                     await asyncio.sleep(10)
@@ -68,16 +67,17 @@ class TelegramBotManager:
 
                 random.shuffle(active_accounts)
                 random.shuffle(ads)
+                random.shuffle(joined_groups)
 
-                for account in active_accounts:
+                for acc in active_accounts:
 
                     for ad in ads:
 
                         for group in joined_groups:
 
-                            # هنا لاحقاً يتم إرسال الإعلان الحقيقي عبر تيليجرام API
+                            # 🔧 هنا مستقبلاً ترسل الإعلان الحقيقي
                             logger.info(
-                                f"[PUBLISH] acc:{account[0]} -> group:{group[0]} -> ad:{ad[0]}"
+                                f"[SEND] acc:{acc[0]} -> group:{group[0]} -> ad:{ad[0]}"
                             )
 
                             await asyncio.sleep(
@@ -93,7 +93,7 @@ class TelegramBotManager:
                 )
 
             except asyncio.CancelledError:
-                logger.info(f"Publishing stopped for admin {admin_id}")
+                logger.info(f"[PUBLISH] Stopped for admin {admin_id}")
                 break
 
             except Exception as e:
@@ -102,7 +102,7 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # JOIN GROUPS
+    # JOIN GROUPS (SIMULATION)
     # ==================================================
 
     def start_join_groups(self, admin_id):
@@ -131,16 +131,15 @@ class TelegramBotManager:
 
     async def _join_groups_loop(self, admin_id):
 
-        logger.info(f"Start joining groups for admin {admin_id}")
+        logger.info(f"[JOIN] Started for admin {admin_id}")
 
         while True:
-
             try:
                 accounts = self.db.get_accounts(admin_id)
                 groups = self.db.get_groups(admin_id)
 
-                active_accounts = [a for a in accounts if a[2]]
-                pending_groups = [g for g in groups if g[2] == "pending"]
+                active_accounts = [a for a in accounts if a[3] == 1]
+                pending_groups = [g for g in groups if g[3] == "pending"]
 
                 if not active_accounts or not pending_groups:
                     await asyncio.sleep(10)
@@ -148,12 +147,15 @@ class TelegramBotManager:
 
                 for group in pending_groups:
 
-                    for account in active_accounts:
+                    for acc in active_accounts:
 
-                        # هنا لاحقاً تنفيذ الانضمام الحقيقي
+                        # 🔧 هنا مستقبلاً تنفيذ الانضمام الحقيقي
                         logger.info(
-                            f"[JOIN] acc:{account[0]} -> group:{group[0]}"
+                            f"[JOIN] acc:{acc[0]} -> group:{group[0]}"
                         )
+
+                        # تحديث الحالة كمحاكاة
+                        # (يمكن لاحقاً جعلها joined أو failed حسب النتيجة)
 
                         await asyncio.sleep(
                             DELAY_SETTINGS["join_groups"]["between_links"]
@@ -164,7 +166,7 @@ class TelegramBotManager:
                 )
 
             except asyncio.CancelledError:
-                logger.info(f"Join stopped for admin {admin_id}")
+                logger.info(f"[JOIN] Stopped for admin {admin_id}")
                 break
 
             except Exception as e:
@@ -202,6 +204,8 @@ class TelegramBotManager:
 
     async def _private_reply_loop(self, admin_id):
 
+        logger.info(f"[PRIVATE REPLY] Started for admin {admin_id}")
+
         while True:
             try:
                 replies = self.db.get_private_replies(admin_id)
@@ -210,8 +214,8 @@ class TelegramBotManager:
                     await asyncio.sleep(5)
                     continue
 
-                for reply in replies:
-                    logger.info(f"[PRIVATE REPLY] {reply[0]}")
+                for r in replies:
+                    logger.info(f"[PRIVATE REPLY] {r[0]}")
                     await asyncio.sleep(
                         DELAY_SETTINGS["private_reply"]["between_replies"]
                     )
@@ -257,6 +261,8 @@ class TelegramBotManager:
 
 
     async def _random_reply_loop(self, admin_id):
+
+        logger.info(f"[RANDOM REPLY] Started for admin {admin_id}")
 
         while True:
             try:
