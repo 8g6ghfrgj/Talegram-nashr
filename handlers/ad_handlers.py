@@ -68,7 +68,7 @@ class AdHandlers:
             [InlineKeyboardButton(AD_TYPES["text"], callback_data="ad_type_text")],
             [InlineKeyboardButton(AD_TYPES["photo"], callback_data="ad_type_photo")],
             [InlineKeyboardButton(AD_TYPES["contact"], callback_data="ad_type_contact")],
-            [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_ads")]
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_process")]
         ]
 
         await query.edit_message_text(
@@ -92,11 +92,21 @@ class AdHandlers:
         context.user_data.clear()
         context.user_data["ad_type"] = ad_type
 
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_process")]
+        ]
+
         if ad_type == "contact":
-            await query.edit_message_text("📞 أرسل جهة الاتصال أو ملف VCF:")
+            await query.edit_message_text(
+                "📞 أرسل جهة الاتصال أو ملف VCF:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
             return ADD_AD_MEDIA
 
-        await query.edit_message_text("📝 أرسل نص الإعلان:")
+        await query.edit_message_text(
+            "📝 أرسل نص الإعلان:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return ADD_AD_TEXT
 
 
@@ -130,13 +140,14 @@ class AdHandlers:
                 "text",
                 text,
                 None,
-                "text",
+                None,
                 user_id
             )
 
-            await message.reply_text(
-                "✅ تم إضافة الإعلان بنجاح" if success else f"❌ {msg}"
-            )
+            if success:
+                await message.reply_text("✅ تم إضافة الإعلان النصي بنجاح")
+            else:
+                await message.reply_text(f"❌ {msg}")
 
             context.user_data.clear()
             return ConversationHandler.END
@@ -146,7 +157,15 @@ class AdHandlers:
 
         context.user_data["ad_text"] = text
 
-        await message.reply_text("🖼️ أرسل الصورة الآن:")
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_process")]
+        ]
+
+        await message.reply_text(
+            "🖼️ أرسل الصورة الآن:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
         return ADD_AD_MEDIA
 
 
@@ -160,7 +179,7 @@ class AdHandlers:
         user_id = message.from_user.id
 
         ad_type = context.user_data.get("ad_type")
-        ad_text = context.user_data.get("ad_text", "")
+        ad_text = context.user_data.get("ad_text")
 
         if not ad_type:
             await message.reply_text("❌ لم يتم تحديد نوع الإعلان")
@@ -168,8 +187,8 @@ class AdHandlers:
 
         os.makedirs("temp_files/ads", exist_ok=True)
 
-        file_path = None
         success = False
+        file_path = None
 
 
         # ---------- PHOTO ----------
@@ -188,7 +207,7 @@ class AdHandlers:
                 "photo",
                 ad_text,
                 file_path,
-                "photo",
+                None,
                 user_id
             )
 
@@ -208,7 +227,7 @@ class AdHandlers:
                 "contact",
                 None,
                 file_path,
-                "contact",
+                None,
                 user_id
             )
 
@@ -237,7 +256,7 @@ class AdHandlers:
                 "contact",
                 None,
                 file_path,
-                "contact",
+                None,
                 user_id
             )
 
@@ -246,9 +265,10 @@ class AdHandlers:
             return ADD_AD_MEDIA
 
 
-        await message.reply_text(
-            "✅ تم إضافة الإعلان بنجاح" if success else "❌ فشل إضافة الإعلان"
-        )
+        if success:
+            await message.reply_text("✅ تم إضافة الإعلان بنجاح")
+        else:
+            await message.reply_text("❌ فشل إضافة الإعلان")
 
         context.user_data.clear()
         return ConversationHandler.END
@@ -269,12 +289,14 @@ class AdHandlers:
             await query.edit_message_text("❌ لا توجد إعلانات")
             return
 
-        text = "📢 قائمة الإعلانات\n\n"
+        text = "📢 قائمة الإعلانات:\n\n"
         keyboard = []
 
         for ad in ads[:15]:
 
-            ad_id, ad_type, ad_text, _, _, added, _, _ = ad
+            # DB schema:
+            # id, admin_id, type, text, media, added
+            ad_id, admin_id, ad_type, ad_text, media, added = ad
 
             emoji = {
                 "text": "📝",
@@ -287,11 +309,11 @@ class AdHandlers:
             if ad_text:
                 text += f"{ad_text[:40]}...\n"
 
-            text += f"{added[:16]}\n──────────\n"
+            text += f"{added}\n──────────\n"
 
             keyboard.append([
                 InlineKeyboardButton(
-                    f"🗑 حذف #{ad_id}",
+                    "🗑 حذف",
                     callback_data=f"delete_ad_{ad_id}"
                 )
             ])
@@ -317,7 +339,7 @@ class AdHandlers:
         user_id = query.from_user.id
 
         if self.db.delete_ad(ad_id, user_id):
-            await query.answer("✅ تم الحذف")
+            await query.answer("✅ تم حذف الإعلان")
         else:
             await query.answer("❌ فشل الحذف")
 
@@ -335,24 +357,17 @@ class AdHandlers:
 
         ads = self.db.get_ads(user_id)
 
-        count = {
-            "text": 0,
-            "photo": 0,
-            "contact": 0
-        }
-
-        for ad in ads:
-            if ad[1] in count:
-                count[ad[1]] += 1
-
-        total = sum(count.values())
+        total = len(ads)
+        text_ads = len([a for a in ads if a[2] == "text"])
+        photo_ads = len([a for a in ads if a[2] == "photo"])
+        contact_ads = len([a for a in ads if a[2] == "contact"])
 
         text = (
             "📊 إحصائيات الإعلانات\n\n"
             f"📢 الإجمالي: {total}\n\n"
-            f"📝 النصية: {count['text']}\n"
-            f"🖼️ الصور: {count['photo']}\n"
-            f"📞 جهات الاتصال: {count['contact']}"
+            f"📝 النصية: {text_ads}\n"
+            f"🖼️ الصور: {photo_ads}\n"
+            f"📞 جهات الاتصال: {contact_ads}"
         )
 
         keyboard = [
