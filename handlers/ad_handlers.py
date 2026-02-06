@@ -1,9 +1,9 @@
-import logging
 import os
+import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from config import ADD_AD_TEXT, ADD_AD_MEDIA, AD_TYPES, MESSAGES
+from config import ADD_AD_TYPE, ADD_AD_TEXT, ADD_AD_MEDIA, AD_TYPES, MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +14,10 @@ class AdHandlers:
         self.db = db
         self.manager = manager
 
-    # ==================================================
-    # MAIN MENU
-    # ==================================================
+
+    # ================================
+    # ADS MENU
+    # ================================
 
     async def manage_ads(self, query, context):
 
@@ -36,9 +37,10 @@ class AdHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # ==================================================
-    # ADD AD START
-    # ==================================================
+
+    # ================================
+    # START ADD AD
+    # ================================
 
     async def add_ad_start(self, query, context):
 
@@ -60,27 +62,30 @@ class AdHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # ==================================================
-    # AD TYPE
-    # ==================================================
+        return ADD_AD_TYPE   # ✅ الإصلاح الأساسي
+
+
+    # ================================
+    # SELECT TYPE
+    # ================================
 
     async def add_ad_type(self, query, context):
 
         ad_type = query.data.replace("ad_type_", "")
-
         context.user_data.clear()
         context.user_data["ad_type"] = ad_type
 
         if ad_type == "contact":
-            await query.edit_message_text("📞 أرسل جهة الاتصال أو ملف VCF الآن:")
+            await query.edit_message_text("📞 أرسل جهة الاتصال أو ملف VCF:")
             return ADD_AD_MEDIA
 
-        await query.edit_message_text("📝 أرسل نص الإعلان الآن:")
+        await query.edit_message_text("📝 أرسل نص الإعلان:")
         return ADD_AD_TEXT
 
-    # ==================================================
-    # AD TEXT
-    # ==================================================
+
+    # ================================
+    # TEXT STEP
+    # ================================
 
     async def add_ad_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -97,11 +102,12 @@ class AdHandlers:
             await update.message.reply_text("❌ النص قصير جداً")
             return ADD_AD_TEXT
 
-        # -------- TEXT ONLY --------
+
+        # ----- TEXT ONLY -----
 
         if ad_type == "text":
 
-            success, message = self.db.add_ad(
+            success, msg = self.db.add_ad(
                 "text",
                 text,
                 None,
@@ -109,23 +115,24 @@ class AdHandlers:
                 user_id
             )
 
-            if success:
-                await update.message.reply_text("✅ تم إضافة الإعلان النصي بنجاح")
-            else:
-                await update.message.reply_text(f"❌ {message}")
+            await update.message.reply_text(
+                "✅ تم إضافة الإعلان" if success else f"❌ {msg}"
+            )
 
             context.user_data.clear()
             return ConversationHandler.END
 
-        # -------- PHOTO WITH TEXT --------
+
+        # ----- PHOTO NEED -----
 
         context.user_data["ad_text"] = text
         await update.message.reply_text("🖼️ أرسل الصورة الآن:")
         return ADD_AD_MEDIA
 
-    # ==================================================
+
+    # ================================
     # MEDIA / CONTACT
-    # ==================================================
+    # ================================
 
     async def add_ad_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -139,8 +146,9 @@ class AdHandlers:
 
         os.makedirs("temp_files/ads", exist_ok=True)
 
-        success = False
         file_path = None
+        success = False
+
 
         # ---------- PHOTO ----------
 
@@ -162,6 +170,7 @@ class AdHandlers:
                 user_id
             )
 
+
         # ---------- CONTACT FILE ----------
 
         elif update.message.document:
@@ -180,6 +189,7 @@ class AdHandlers:
                 "contact",
                 user_id
             )
+
 
         # ---------- DIRECT CONTACT ----------
 
@@ -209,21 +219,23 @@ class AdHandlers:
                 user_id
             )
 
+
         else:
-            await update.message.reply_text("❌ لم يتم التعرف على الملف")
+            await update.message.reply_text("❌ نوع غير مدعوم")
             return ADD_AD_MEDIA
 
-        if success:
-            await update.message.reply_text("✅ تم إضافة الإعلان بنجاح")
-        else:
-            await update.message.reply_text("❌ فشل إضافة الإعلان")
+
+        await update.message.reply_text(
+            "✅ تم إضافة الإعلان بنجاح" if success else "❌ فشل الحفظ"
+        )
 
         context.user_data.clear()
         return ConversationHandler.END
 
-    # ==================================================
+
+    # ================================
     # SHOW ADS
-    # ==================================================
+    # ================================
 
     async def show_ads(self, query, context):
 
@@ -233,12 +245,12 @@ class AdHandlers:
             await query.edit_message_text("❌ لا توجد إعلانات")
             return
 
-        text = "📢 قائمة الإعلانات\n\n"
+        text = "📢 الإعلانات:\n\n"
         keyboard = []
 
         for ad in ads[:15]:
 
-            ad_id, ad_type, ad_text, media_path, _, added, _, _ = ad
+            ad_id, ad_type, ad_text, _, _, added, _, _ = ad
 
             emoji = {
                 "text": "📝",
@@ -255,7 +267,7 @@ class AdHandlers:
 
             keyboard.append([
                 InlineKeyboardButton(
-                    f"🗑️ حذف #{ad_id}",
+                    f"🗑 حذف #{ad_id}",
                     callback_data=f"delete_ad_{ad_id}"
                 )
             ])
@@ -270,26 +282,27 @@ class AdHandlers:
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # ==================================================
-    # DELETE AD
-    # ==================================================
+
+    # ================================
+    # DELETE
+    # ================================
 
     async def delete_ad(self, query, context, ad_id):
 
         if self.db.delete_ad(ad_id, query.from_user.id):
             await query.answer("✅ تم الحذف")
         else:
-            await query.answer("❌ فشل الحذف")
+            await query.answer("❌ فشل")
 
         await self.show_ads(query, context)
 
-    # ==================================================
+
+    # ================================
     # STATS
-    # ==================================================
+    # ================================
 
     async def show_ad_stats(self, query, context):
 
-        stats = self.db.get_statistics(query.from_user.id)
         ads = self.db.get_ads(query.from_user.id)
 
         count = {"text": 0, "photo": 0, "contact": 0}
@@ -298,12 +311,14 @@ class AdHandlers:
             if ad[1] in count:
                 count[ad[1]] += 1
 
+        total = sum(count.values())
+
         text = (
             "📊 إحصائيات الإعلانات\n\n"
-            f"📢 الإجمالي: {stats['ads']}\n\n"
-            f"📝 النصية: {count['text']}\n"
-            f"🖼️ الصور: {count['photo']}\n"
-            f"📞 جهات الاتصال: {count['contact']}"
+            f"📢 الإجمالي: {total}\n\n"
+            f"📝 نصي: {count['text']}\n"
+            f"🖼 صورة: {count['photo']}\n"
+            f"📞 جهات اتصال: {count['contact']}"
         )
 
         keyboard = [
@@ -311,7 +326,4 @@ class AdHandlers:
             [InlineKeyboardButton("🔙 رجوع", callback_data="back_to_ads")]
         ]
 
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
