@@ -55,8 +55,13 @@ class AccountHandlers:
 
         context.user_data.clear()
 
+        keyboard = [
+            [InlineKeyboardButton("❌ إلغاء", callback_data="cancel_process")]
+        ]
+
         await query.edit_message_text(
-            "📥 أرسل جلسة الحساب أو بيانات الدخول:"
+            "📥 أرسل جلسة الحساب الآن:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
         return ADD_ACCOUNT
@@ -74,7 +79,7 @@ class AccountHandlers:
         session_data = message.text.strip()
 
         if len(session_data) < 5:
-            await message.reply_text("❌ البيانات غير صالحة")
+            await message.reply_text("❌ الجلسة غير صالحة")
             return ADD_ACCOUNT
 
         success, msg = self.db.add_account(user_id, session_data)
@@ -103,26 +108,28 @@ class AccountHandlers:
             await query.edit_message_text("❌ لا توجد حسابات")
             return
 
-        text = "👥 الحسابات:\n\n"
+        text = "👥 الحسابات المسجلة:\n\n"
         keyboard = []
 
         for acc in accounts[:15]:
 
-            acc_id, session, status, added, _ = acc
+            # DB schema:
+            # id, admin_id, session, active, added
+            acc_id, admin_id, session, status, added = acc
 
-            status_icon = "✅" if status else "⛔"
+            status_icon = "✅" if status == 1 else "⛔"
 
             text += f"#{acc_id} {status_icon}\n"
-            text += f"{session[:30]}...\n"
-            text += f"{added[:16]}\n──────────\n"
+            text += f"{session[:40]}...\n"
+            text += f"{added}\n──────────\n"
 
             keyboard.append([
                 InlineKeyboardButton(
-                    f"{'⛔ تعطيل' if status else '✅ تفعيل'} #{acc_id}",
+                    f"{'⛔ تعطيل' if status == 1 else '✅ تفعيل'}",
                     callback_data=f"toggle_account_{acc_id}"
                 ),
                 InlineKeyboardButton(
-                    f"🗑 حذف #{acc_id}",
+                    "🗑 حذف",
                     callback_data=f"delete_account_{acc_id}"
                 )
             ])
@@ -148,7 +155,7 @@ class AccountHandlers:
         user_id = query.from_user.id
 
         if self.db.delete_account(account_id, user_id):
-            await query.answer("✅ تم الحذف")
+            await query.answer("✅ تم حذف الحساب")
         else:
             await query.answer("❌ فشل الحذف")
 
@@ -165,7 +172,7 @@ class AccountHandlers:
         user_id = query.from_user.id
 
         if self.db.toggle_account_status(account_id, user_id):
-            await query.answer("🔁 تم التغيير")
+            await query.answer("🔁 تم تغيير الحالة")
         else:
             await query.answer("❌ فشل التغيير")
 
@@ -173,7 +180,7 @@ class AccountHandlers:
 
 
     # ==================================================
-    # STATS
+    # ACCOUNT STATS
     # ==================================================
 
     async def show_account_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -184,7 +191,7 @@ class AccountHandlers:
         accounts = self.db.get_accounts(user_id)
 
         total = len(accounts)
-        active = len([a for a in accounts if a[2]])
+        active = len([a for a in accounts if a[3] == 1])
         inactive = total - active
 
         text = (
