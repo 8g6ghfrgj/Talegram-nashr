@@ -12,17 +12,22 @@ from telegram.ext import (
     filters
 )
 
-# ===== تأكيد مسار المشروع =====
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# ================= PATH FIX (Render Safe) =================
 
-# ===== CONFIG =====
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE_DIR)
+
+# ================= CONFIG =================
+
 from config import BOT_TOKEN, OWNER_ID, MESSAGES
 
-# ===== DATABASE + MANAGER =====
+# ================= CORE =================
+
 from database.database import BotDatabase
 from managers.telegram_manager import TelegramBotManager
 
-# ===== HANDLERS (استيراد مباشر - بدون مشاكل Render) =====
+# ================= HANDLERS =================
+
 from handlers.account_handlers import AccountHandlers
 from handlers.ad_handlers import AdHandlers
 from handlers.group_handlers import GroupHandlers
@@ -31,9 +36,7 @@ from handlers.admin_handlers import AdminHandlers
 from handlers.conversation_handlers import ConversationHandlers
 
 
-# ==================================================
-# LOGGING
-# ==================================================
+# ================= LOGGING =================
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 # ==================================================
-# MAIN BOT CLASS
+# MAIN BOT
 # ==================================================
 
 class MainBot:
@@ -55,13 +58,13 @@ class MainBot:
             print("❌ BOT_TOKEN غير موجود")
             sys.exit(1)
 
-        # ===== DATABASE =====
+        # ===== Database =====
         self.db = BotDatabase()
 
-        # ===== MANAGER =====
+        # ===== Manager =====
         self.manager = TelegramBotManager(self.db)
 
-        # ===== HANDLERS =====
+        # ===== Handlers =====
         self.account_handlers = AccountHandlers(self.db, self.manager)
         self.ad_handlers = AdHandlers(self.db, self.manager)
         self.group_handlers = GroupHandlers(self.db, self.manager)
@@ -78,12 +81,12 @@ class MainBot:
             self.reply_handlers
         )
 
-        # ===== TELEGRAM APP =====
+        # ===== Telegram Application =====
         self.app = Application.builder().token(BOT_TOKEN).build()
 
         self.setup_handlers()
 
-        # ===== ADD OWNER AS ADMIN =====
+        # ===== Add owner as admin automatically =====
         self.db.add_admin(
             OWNER_ID,
             "@owner",
@@ -93,7 +96,7 @@ class MainBot:
 
 
     # ==================================================
-    # /start
+    # START
     # ==================================================
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,6 +129,8 @@ class MainBot:
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+        context.user_data.clear()
+
         if update.message:
             await update.message.reply_text("❌ تم إلغاء العملية")
 
@@ -145,10 +150,10 @@ class MainBot:
         self.app.add_handler(CommandHandler("start", self.start))
         self.app.add_handler(CommandHandler("cancel", self.cancel))
 
-        # Conversations + callbacks
+        # All conversations & callbacks
         self.conversation_handlers.setup_conversation_handlers(self.app)
 
-        # Ignore random text
+        # Ignore random messages outside flows
         self.app.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.ignore_message)
         )
@@ -175,7 +180,9 @@ class MainBot:
 
         if update and getattr(update, "effective_message", None):
             try:
-                await update.effective_message.reply_text("❌ حدث خطأ في النظام")
+                await update.effective_message.reply_text(
+                    "❌ حدث خطأ في النظام"
+                )
             except:
                 pass
 
@@ -187,7 +194,8 @@ class MainBot:
     def run(self):
 
         print("🚀 Bot is running...")
-        self.app.run_polling()
+        self.app.run_polling(drop_pending_updates=True)
+
 
 
 # ==================================================
