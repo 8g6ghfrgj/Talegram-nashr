@@ -44,7 +44,7 @@ class ConversationHandlers:
         self.reply_handlers = reply_handlers
 
     # ==================================================
-    # CALLBACK ROUTER (MENUS ONLY)
+    # MAIN CALLBACK ROUTER (MENUS ONLY)
     # ==================================================
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,6 +53,10 @@ class ConversationHandlers:
         await query.answer()
         data = query.data
         user_id = query.from_user.id
+
+        # تجاهل callbacks الخاصة بالمحادثات
+        if data.startswith("ad_type_"):
+            return
 
         if not self.db.is_admin(user_id):
             await query.edit_message_text("❌ ليس لديك صلاحية.")
@@ -167,7 +171,7 @@ class ConversationHandlers:
 
         except Exception as e:
             logger.exception(e)
-            await query.edit_message_text(f"❌ خطأ: {e}")
+            await query.edit_message_text("❌ حدث خطأ في النظام")
 
     # ==================================================
     # BACK HANDLER
@@ -239,7 +243,7 @@ class ConversationHandlers:
             ]
 
             await query.edit_message_text(
-                f"✅ بدأ النشر\n\n"
+                f"✅ بدأ النشر بنجاح\n\n"
                 f"👥 الحسابات: {len(accounts)}\n"
                 f"📢 الإعلانات: {len(ads)}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -408,7 +412,7 @@ class ConversationHandlers:
             )
         )
 
-        # ===== MAIN CALLBACK ROUTER =====
+        # ===== MAIN ROUTER =====
 
         application.add_handler(
             CallbackQueryHandler(self.handle_callback)
