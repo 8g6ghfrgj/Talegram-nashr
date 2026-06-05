@@ -243,6 +243,7 @@ def get_add_reply_conversation():
                 MessageHandler(filters.TEXT & ~filters.COMMAND, add_private_reply_receive)
             ],
             ADD_RANDOM_REPLY: [
+                CallbackQueryHandler(add_private_reply_start, pattern="^reply_private$"),
                 CallbackQueryHandler(add_random_reply_start, pattern="^reply_random$"),
                 CallbackQueryHandler(add_random_reply_type, pattern="^random_"),
                 CallbackQueryHandler(skip_text, pattern="^skip_text$"),
