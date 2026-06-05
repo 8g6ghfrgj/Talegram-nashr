@@ -293,11 +293,6 @@ async def menus_callback_router(update: Update, context: ContextTypes.DEFAULT_TY
         else:
             await query.edit_message_text("⚠️ عذراً، نظام النشر غير متاح حالياً")
 
-    # ---------- CONVERSATIONS (يتم التعامل معها بواسطة ConversationHandlers) ----------
-    # الأزرار التالية يتم معالجتها بواسطة ConversationHandlers وليس هنا:
-    # add_account, add_ad, add_group, add_admin, add_private_reply, add_random_reply, menu_set_delay
-    # لذلك لا نضع لها أي شرط هنا، بل تترك لـ ConversationHandler ليلتقطها
-
     else:
         await query.edit_message_text("❌ زر غير معروف")
 
@@ -309,5 +304,8 @@ async def menus_callback_router(update: Update, context: ContextTypes.DEFAULT_TY
 def register_menu_handlers(application):
 
     application.add_handler(
-        CallbackQueryHandler(menus_callback_router)
+        CallbackQueryHandler(
+            menus_callback_router,
+            pattern=r"^(menu_|show_|delete_|toggle_|back_|start_publishing|stop_publishing|ad_stats|group_stats)"
+        )
     )
