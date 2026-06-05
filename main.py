@@ -121,24 +121,28 @@ class MainBot:
     # REGISTER HANDLERS
     # ==================================================
 
-    def _register_handlers(self):
+def _register_handlers(self):
 
-        # commands
-        self.app.add_handler(CommandHandler("start", self.start))
+    # commands
+    self.app.add_handler(
+        CommandHandler("start", self.start)
+    )
 
-        # menus (CallbackQueryHandler واحد فقط)
-        register_menu_handlers(self.app)
+    # ================= CONVERSATIONS =================
+    self.app.add_handler(get_add_account_conversation())
+    self.app.add_handler(get_add_admin_conversation())
+    self.app.add_handler(get_add_ad_conversation())
+    self.app.add_handler(get_add_group_conversation())
+    self.app.add_handler(get_add_reply_conversation())
+    self.app.add_handler(get_set_publish_delay_conversation())
 
-        # conversations (إضافة فقط)
-        self.app.add_handler(get_add_account_conversation())
-        self.app.add_handler(get_add_admin_conversation())
-        self.app.add_handler(get_add_ad_conversation())
-        self.app.add_handler(get_add_group_conversation())
-        self.app.add_handler(get_add_reply_conversation())
-        self.app.add_handler(get_set_publish_delay_conversation())
+    # ================= MENUS =================
+    register_menu_handlers(self.app)
 
-        # errors
-        self.app.add_error_handler(self.error_handler)
+    # ================= ERRORS =================
+    self.app.add_error_handler(
+        self.error_handler
+    )
 
 
     # ==================================================
