@@ -178,28 +178,6 @@ async def menus_callback_router(update: Update, context: ContextTypes.DEFAULT_TY
     elif data == "menu_admins":
         await show_admins_menu(update, context)
 
-    # ---------- CONVERSATIONS ----------
-    elif data == "add_account":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "add_ad":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "add_group":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "add_admin":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "add_private_reply":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "add_random_reply":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
-    elif data == "menu_set_delay":
-        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
-
     # ---------- ACCOUNTS ----------
     elif data == "show_accounts":
         if account_handlers:
@@ -314,6 +292,11 @@ async def menus_callback_router(update: Update, context: ContextTypes.DEFAULT_TY
                 await query.edit_message_text("⚠️ النشر غير نشط")
         else:
             await query.edit_message_text("⚠️ عذراً، نظام النشر غير متاح حالياً")
+
+    # ---------- CONVERSATIONS (يتم التعامل معها بواسطة ConversationHandlers) ----------
+    # الأزرار التالية يتم معالجتها بواسطة ConversationHandlers وليس هنا:
+    # add_account, add_ad, add_group, add_admin, add_private_reply, add_random_reply, menu_set_delay
+    # لذلك لا نضع لها أي شرط هنا، بل تترك لـ ConversationHandler ليلتقطها
 
     else:
         await query.edit_message_text("❌ زر غير معروف")
