@@ -29,17 +29,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎛 لوحة التحكم الرئيسية",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-    # ---------- CONVERSATIONS ----------
-elif data in [
-    "add_account",
-    "add_ad",
-    "add_group",
-    "add_admin",
-    "add_private_reply",
-    "add_random_reply",
-    "menu_set_delay"
-]:
-    return
 
 
 # ==================================================
@@ -189,72 +178,142 @@ async def menus_callback_router(update: Update, context: ContextTypes.DEFAULT_TY
     elif data == "menu_admins":
         await show_admins_menu(update, context)
 
+    # ---------- CONVERSATIONS ----------
+    elif data == "add_account":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "add_ad":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "add_group":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "add_admin":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "add_private_reply":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "add_random_reply":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
+    elif data == "menu_set_delay":
+        await query.edit_message_text("⚠️ هذه الخاصية تحتاج إلى تفعيل - سيتم إضافتها قريباً")
+
     # ---------- ACCOUNTS ----------
     elif data == "show_accounts":
-        await account_handlers.show_accounts(update, context)
+        if account_handlers:
+            await account_handlers.show_accounts(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الحسابات غير متاح حالياً")
 
     elif data.startswith("toggle_account_"):
-        acc_id = int(data.split("_")[-1])
-        await account_handlers.toggle_account(update, context, acc_id)
+        if account_handlers:
+            acc_id = int(data.split("_")[-1])
+            await account_handlers.toggle_account(update, context, acc_id)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الحسابات غير متاح حالياً")
 
     elif data.startswith("delete_account_"):
-        acc_id = int(data.split("_")[-1])
-        await account_handlers.delete_account(update, context, acc_id)
+        if account_handlers:
+            acc_id = int(data.split("_")[-1])
+            await account_handlers.delete_account(update, context, acc_id)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الحسابات غير متاح حالياً")
 
     # ---------- ADS ----------
     elif data == "show_ads":
-        await ad_handlers.show_ads(update, context)
+        if ad_handlers:
+            await ad_handlers.show_ads(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الإعلانات غير متاح حالياً")
 
     elif data == "ad_stats":
-        await ad_handlers.ad_stats(update, context)
+        if ad_handlers:
+            await ad_handlers.ad_stats(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الإعلانات غير متاح حالياً")
 
     elif data.startswith("delete_ad_"):
-        ad_id = int(data.split("_")[-1])
-        await ad_handlers.delete_ad(update, context, ad_id)
+        if ad_handlers:
+            ad_id = int(data.split("_")[-1])
+            await ad_handlers.delete_ad(update, context, ad_id)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الإعلانات غير متاح حالياً")
 
     # ---------- GROUPS ----------
     elif data == "show_groups":
-        await group_handlers.show_groups(update, context)
+        if group_handlers:
+            await group_handlers.show_groups(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام المجموعات غير متاح حالياً")
 
     elif data == "group_stats":
-        await group_handlers.group_stats(update, context)
+        if group_handlers:
+            await group_handlers.group_stats(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام المجموعات غير متاح حالياً")
 
     elif data.startswith("delete_group_"):
-        group_id = int(data.split("_")[-1])
-        await group_handlers.delete_group(update, context, group_id)
+        if group_handlers:
+            group_id = int(data.split("_")[-1])
+            await group_handlers.delete_group(update, context, group_id)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام المجموعات غير متاح حالياً")
 
     # ---------- REPLIES ----------
     elif data == "show_replies":
-        await reply_handlers.show_replies(update, context)
+        if reply_handlers:
+            await reply_handlers.show_replies(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الردود غير متاح حالياً")
 
     elif data.startswith("delete_private_reply_"):
-        rid = int(data.split("_")[-1])
-        await reply_handlers.delete_private_reply(update, context, rid)
+        if reply_handlers:
+            rid = int(data.split("_")[-1])
+            await reply_handlers.delete_private_reply(update, context, rid)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الردود غير متاح حالياً")
 
     elif data.startswith("delete_random_reply_"):
-        rid = int(data.split("_")[-1])
-        await reply_handlers.delete_random_reply(update, context, rid)
+        if reply_handlers:
+            rid = int(data.split("_")[-1])
+            await reply_handlers.delete_random_reply(update, context, rid)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام الردود غير متاح حالياً")
 
     # ---------- ADMINS ----------
     elif data == "show_admins":
-        await admin_handlers.show_admins(update, context)
+        if admin_handlers:
+            await admin_handlers.show_admins(update, context)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام المشرفين غير متاح حالياً")
 
     elif data.startswith("delete_admin_"):
-        aid = int(data.split("_")[-1])
-        await admin_handlers.delete_admin(update, context, aid)
+        if admin_handlers:
+            aid = int(data.split("_")[-1])
+            await admin_handlers.delete_admin(update, context, aid)
+        else:
+            await query.edit_message_text("⚠️ عذراً، نظام المشرفين غير متاح حالياً")
 
     # ---------- PUBLISH ----------
     elif data == "start_publishing":
-        if manager.start_publishing(query.from_user.id):
-            await query.edit_message_text("🚀 تم بدء النشر")
+        if manager:
+            if manager.start_publishing(query.from_user.id):
+                await query.edit_message_text("🚀 تم بدء النشر")
+            else:
+                await query.edit_message_text("⚠️ النشر يعمل بالفعل")
         else:
-            await query.edit_message_text("⚠️ النشر يعمل بالفعل")
+            await query.edit_message_text("⚠️ عذراً، نظام النشر غير متاح حالياً")
 
     elif data == "stop_publishing":
-        if manager.stop_publishing(query.from_user.id):
-            await query.edit_message_text("⏹ تم إيقاف النشر")
+        if manager:
+            if manager.stop_publishing(query.from_user.id):
+                await query.edit_message_text("⏹ تم إيقاف النشر")
+            else:
+                await query.edit_message_text("⚠️ النشر غير نشط")
         else:
-            await query.edit_message_text("⚠️ النشر غير نشط")
+            await query.edit_message_text("⚠️ عذراً، نظام النشر غير متاح حالياً")
 
     else:
         await query.edit_message_text("❌ زر غير معروف")
