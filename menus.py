@@ -29,6 +29,17 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎛 لوحة التحكم الرئيسية",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+    # ---------- CONVERSATIONS ----------
+elif data in [
+    "add_account",
+    "add_ad",
+    "add_group",
+    "add_admin",
+    "add_private_reply",
+    "add_random_reply",
+    "menu_set_delay"
+]:
+    return
 
 
 # ==================================================
