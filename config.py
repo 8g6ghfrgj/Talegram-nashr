@@ -6,7 +6,7 @@ from logging import INFO
 # BOT
 # ==================================================
 
-BOT_TOKEN = os.environ.get("7574088292:AAHFAWoaRF8dZ41UFEciTagj6A_kGerC2oM")
+BOT_TOKEN = os.environ.get("7574088292:AAFp6hPG-QjLoIoZFOrwx6odApIcQ3k6rXM")
 
 # ==================================================
 # OWNER
