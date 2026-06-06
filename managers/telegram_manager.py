@@ -109,27 +109,36 @@ class TelegramBotManager:
             return []
 
 
-    async def refresh_all_groups(self, admin_id: int) -> dict:
+    async def refresh_all_groups(self, update, context):
         """تحديث قائمة المجموعات لجميع حسابات المدير"""
         
+        admin_id = update.effective_user.id
         accounts = self.db.get_accounts(admin_id)
+        active_accounts = [a for a in accounts if a['active'] == 1]
+        
+        if not active_accounts:
+            await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
+            return
+        
+        await update.message.reply_text("⏳ جاري تحديث المجموعات...")
+        
         results = {}
+        total_groups = 0
         
-        for acc in accounts:
-            if acc['active'] == 1:
-                session_string = acc['session']
-                # مسح الكاش للحصول على بيانات جديدة
-                if session_string in self.groups_cache:
-                    del self.groups_cache[session_string]
-                
-                groups = await self.fetch_all_groups(session_string)
-                results[acc['id']] = {
-                    'account_id': acc['id'],
-                    'groups_count': len(groups),
-                    'groups': groups
-                }
+        for acc in active_accounts:
+            session_string = acc['session']
+            # مسح الكاش للحصول على بيانات جديدة
+            if session_string in self.groups_cache:
+                del self.groups_cache[session_string]
+            
+            groups = await self.fetch_all_groups(session_string)
+            total_groups += len(groups)
+            results[acc['id']] = {
+                'account_id': acc['id'],
+                'groups_count': len(groups)
+            }
         
-        return results
+        await update.message.reply_text(f"✅ تم التحديث! إجمالي المجموعات: {total_groups}")
 
 
     # ==================================================
@@ -177,9 +186,20 @@ class TelegramBotManager:
                 accounts = self.db.get_accounts(admin_id)
                 ads = self.db.get_ads(admin_id)
 
-                # تصفية الحسابات والإعلانات النشطة
+                # تصفية الحسابات النشطة
                 active_accounts = [a for a in accounts if a['active'] == 1]
-                active_ads = [a for a in ads if a.get('active', 1) == 1]
+                
+                # تصفية الإعلانات النشطة
+                active_ads = []
+                for ad in ads:
+                    try:
+                        if 'active' in ad.keys():
+                            if ad['active'] == 1:
+                                active_ads.append(ad)
+                        else:
+                            active_ads.append(ad)
+                    except:
+                        active_ads.append(ad)
 
                 if not active_accounts:
                     logger.warning("No active accounts")
@@ -191,7 +211,7 @@ class TelegramBotManager:
                     await asyncio.sleep(30)
                     continue
 
-                # لكل حساب، جلب جميع المجموعات التي فيها
+                # لكل حساب، جلب جميع المجموعات التي فيه
                 for acc in active_accounts:
                     
                     session_string = acc['session']
@@ -233,7 +253,7 @@ class TelegramBotManager:
                             if group['username']:
                                 target = f"@{group['username']}"
                             else:
-                                target = group['chat_id']  # استخدام المعرف الرقمي للمجموعة الخاصة
+                                target = group['chat_id']
 
                             try:
                                 logger.info(f"📤 Sending to {group['name']} ({target})")
@@ -293,7 +313,7 @@ class TelegramBotManager:
     # ==================================================
 
     async def test_publish_once(self, update, context):
-        """تجربة نشر رسالة تجريبية في جميع المجموعات"""
+        """تجربة نشر رسالة تجريبية في أول 3 مجموعات"""
         
         admin_id = update.effective_user.id
         
@@ -322,7 +342,6 @@ class TelegramBotManager:
             
             try:
                 client = await self.get_client(session_string)
-                me = await client.get_me()
                 
                 # جرب أول 3 مجموعات فقط للتجربة
                 for group in groups[:3]:
@@ -381,11 +400,36 @@ class TelegramBotManager:
                 result += f"  ... و {len(groups) - 20} مجموعة أخرى\n"
             
             result += "\n" + "━" * 30 + "\n\n"
-        
-        if len(result) > 4000:
-            result = result[:4000] + "\n\n... تم اقتصار العرض"
+            
+            if len(result) > 4000:
+                result = result[:4000] + "\n\n... تم اقتصار العرض"
+                break
         
         await update.message.reply_text(result, parse_mode='Markdown')
+
+
+    async def get_status(self, update, context):
+        """عرض حالة البوت"""
+        
+        admin_id = update.effective_user.id
+        accounts = self.db.get_accounts(admin_id)
+        ads = self.db.get_ads(admin_id)
+        
+        active_accounts = [a for a in accounts if a['active'] == 1]
+        
+        is_publishing = admin_id in self.publish_tasks
+        
+        status_text = f"""
+📊 **حالة البوت**
+━━━━━━━━━━━━━━━━━━━
+🚀 حالة النشر: {'✅ شغال' if is_publishing else '⭕ متوقف'}
+👥 عدد الحسابات: {len(accounts)}
+✅ الحسابات المفعلة: {len(active_accounts)}
+📢 عدد الإعلانات: {len(ads)}
+⏱ وقت التأخير: {self.publish_delay} ثانية
+━━━━━━━━━━━━━━━━━━━
+"""
+        await update.message.reply_text(status_text, parse_mode='Markdown')
 
 
     # ==================================================
@@ -396,26 +440,6 @@ class TelegramBotManager:
         """تغيير وقت التأخير بين الرسائل"""
         self.publish_delay = delay_seconds
         logger.info(f"[SETTINGS] Publish delay set to {delay_seconds} seconds")
-
-
-    # ==================================================
-    # STATUS
-    # ==================================================
-
-    def is_publishing(self, admin_id: int) -> bool:
-        return admin_id in self.publish_tasks
-
-
-    def get_status(self, admin_id: int) -> dict:
-        accounts = self.db.get_accounts(admin_id)
-        active_accounts = [a for a in accounts if a['active'] == 1]
-        
-        return {
-            "is_publishing": admin_id in self.publish_tasks,
-            "accounts_count": len(accounts),
-            "active_accounts": len(active_accounts),
-            "publish_delay": self.publish_delay
-        }
 
 
     # ==================================================
