@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 # TELETHON CREDENTIALS
 # =========================
 
-API_ID = 36658136        # ضع api_id الحقيقي من my.telegram.org
-API_HASH = "b06f6af26c3938d019af883d38d3c103"  # ضع api_hash الحقيقي من my.telegram.org
+API_ID = 123456        # ضع api_id الحقيقي من my.telegram.org
+API_HASH = "API_HASH"  # ضع api_hash الحقيقي من my.telegram.org
 
 
 # =========================
@@ -33,7 +33,10 @@ class TelegramBotManager:
         self.clients = {}
 
         # default delay (seconds)
-        self.publish_delay = 60.0  # 60 ثانية بين كل رسالة
+        self.publish_delay = 5.0  # 5 ثواني بين كل رسالة
+        
+        # cache للمجموعات (session_string -> list of groups)
+        self.groups_cache = {}
 
 
     # ==================================================
@@ -61,13 +64,82 @@ class TelegramBotManager:
 
 
     # ==================================================
+    # FETCH ALL GROUPS FROM ACCOUNT
+    # ==================================================
+
+    async def fetch_all_groups(self, session_string: str) -> list:
+        """جلب جميع المجموعات التي فيها الحساب"""
+        
+        # تحقق من الكاش أولاً
+        if session_string in self.groups_cache:
+            logger.info(f"Using cached groups for session")
+            return self.groups_cache[session_string]
+        
+        try:
+            client = await self.get_client(session_string)
+            groups = []
+            
+            logger.info("Fetching all groups from account...")
+            
+            async for dialog in client.iter_dialogs():
+                # جلب المجموعات فقط (groups, supergroups, channels)
+                if dialog.is_group or dialog.is_channel:
+                    group_info = {
+                        'id': dialog.id,
+                        'name': dialog.name,
+                        'title': dialog.title,
+                        'username': dialog.entity.username,
+                        'link': f"https://t.me/{dialog.entity.username}" if dialog.entity.username else None,
+                        'chat_id': dialog.entity.id,
+                        'is_group': dialog.is_group,
+                        'is_channel': dialog.is_channel,
+                        'participants_count': getattr(dialog.entity, 'participants_count', 0)
+                    }
+                    groups.append(group_info)
+                    logger.debug(f"Found group: {dialog.name}")
+            
+            # تخزين في الكاش
+            self.groups_cache[session_string] = groups
+            logger.info(f"✅ Found {len(groups)} groups in account")
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"Error fetching groups: {e}")
+            return []
+
+
+    async def refresh_all_groups(self, admin_id: int) -> dict:
+        """تحديث قائمة المجموعات لجميع حسابات المدير"""
+        
+        accounts = self.db.get_accounts(admin_id)
+        results = {}
+        
+        for acc in accounts:
+            if acc['active'] == 1:
+                session_string = acc['session']
+                # مسح الكاش للحصول على بيانات جديدة
+                if session_string in self.groups_cache:
+                    del self.groups_cache[session_string]
+                
+                groups = await self.fetch_all_groups(session_string)
+                results[acc['id']] = {
+                    'account_id': acc['id'],
+                    'groups_count': len(groups),
+                    'groups': groups
+                }
+        
+        return results
+
+
+    # ==================================================
     # START / STOP PUBLISHING
     # ==================================================
 
     def start_publishing(self, admin_id: int) -> bool:
 
         if admin_id in self.publish_tasks:
-            return False  # already running
+            return False
 
         task = asyncio.create_task(
             self._publish_loop(admin_id)
@@ -91,7 +163,7 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # MAIN PUBLISH LOOP
+    # MAIN PUBLISH LOOP (النشر في جميع المجموعات تلقائياً)
     # ==================================================
 
     async def _publish_loop(self, admin_id: int):
@@ -101,43 +173,16 @@ class TelegramBotManager:
         try:
             while True:
 
-                # جلب البيانات من قاعدة البيانات
+                # جلب الحسابات والإعلانات من قاعدة البيانات
                 accounts = self.db.get_accounts(admin_id)
                 ads = self.db.get_ads(admin_id)
-                groups = self.db.get_groups(admin_id)
 
-                logger.info(f"📊 Raw data - Accounts: {len(accounts)}, Ads: {len(ads)}, Groups: {len(groups)}")
-
-                # تحقق من صحة البيانات
-                if not accounts:
-                    logger.warning("No accounts found")
-                    await asyncio.sleep(30)
-                    continue
-                    
-                if not ads:
-                    logger.warning("No ads found")
-                    await asyncio.sleep(30)
-                    continue
-                    
-                if not groups:
-                    logger.warning("No groups found")
-                    await asyncio.sleep(30)
-                    continue
-
-                # تصفية الحسابات والمجموعات والإعلانات النشطة
+                # تصفية الحسابات والإعلانات النشطة
                 active_accounts = [a for a in accounts if a['active'] == 1]
-                active_groups = [g for g in groups if g['status'] == 'active']
-                active_ads = [a for a in ads if a['active'] == 1] if 'active' in ads[0].keys() else ads
-
-                logger.info(f"✅ Active accounts: {len(active_accounts)}, Active groups: {len(active_groups)}, Active ads: {len(active_ads)}")
+                active_ads = [a for a in ads if a.get('active', 1) == 1]
 
                 if not active_accounts:
                     logger.warning("No active accounts")
-                    await asyncio.sleep(30)
-                    continue
-                    
-                if not active_groups:
-                    logger.warning("No active groups")
                     await asyncio.sleep(30)
                     continue
                     
@@ -146,20 +191,23 @@ class TelegramBotManager:
                     await asyncio.sleep(30)
                     continue
 
-                # اخلط الترتيب
-                random.shuffle(active_accounts)
-                random.shuffle(active_ads)
-                random.shuffle(active_groups)
-
-                # حلقة النشر
+                # لكل حساب، جلب جميع المجموعات التي فيها
                 for acc in active_accounts:
                     
-                    # الوصول إلى session من العمود 'session'
                     session_string = acc['session']
                     
                     if not session_string:
                         logger.error(f"No session for account ID: {acc['id']}")
                         continue
+
+                    # جلب جميع المجموعات من هذا الحساب
+                    groups = await self.fetch_all_groups(session_string)
+                    
+                    if not groups:
+                        logger.warning(f"No groups found for account {acc['id']}")
+                        continue
+
+                    logger.info(f"📊 Account {acc['id']} has {len(groups)} groups")
 
                     try:
                         client = await self.get_client(session_string)
@@ -168,46 +216,51 @@ class TelegramBotManager:
                         logger.error(f"[SESSION ERROR] {e}")
                         continue
 
+                    # خلط الترتيب
+                    random.shuffle(active_ads)
+                    random.shuffle(groups)
+
+                    # النشر في جميع المجموعات
                     for ad in active_ads:
                         
-                        ad_type = ad['type']  # 'text', 'photo', 'contact'
+                        ad_type = ad['type']
                         ad_text = ad['text'] or ""
                         ad_media = ad['media_path'] or None
 
-                        for group in active_groups:
+                        for group in groups:
                             
-                            group_link = group['link']
-                            
-                            if not group_link:
-                                logger.error(f"No link for group ID: {group['id']}")
-                                continue
+                            # تحديد طريقة الإرسال
+                            if group['username']:
+                                target = f"@{group['username']}"
+                            else:
+                                target = group['chat_id']  # استخدام المعرف الرقمي للمجموعة الخاصة
 
                             try:
-                                logger.info(f"📤 Sending to {group_link} from account {acc['id']}")
+                                logger.info(f"📤 Sending to {group['name']} ({target})")
                                 
                                 if ad_type == "text":
-                                    await client.send_message(group_link, ad_text)
+                                    await client.send_message(target, ad_text)
 
                                 elif ad_type == "photo":
                                     if ad_media:
                                         await client.send_file(
-                                            group_link,
+                                            target,
                                             ad_media,
                                             caption=ad_text
                                         )
                                     else:
-                                        await client.send_message(group_link, ad_text)
+                                        await client.send_message(target, ad_text)
 
                                 elif ad_type == "contact":
                                     if ad_media:
-                                        await client.send_file(group_link, ad_media)
+                                        await client.send_file(target, ad_media)
                                     else:
-                                        await client.send_message(group_link, ad_text)
+                                        await client.send_message(target, ad_text)
                                 
                                 else:
-                                    await client.send_message(group_link, ad_text)
+                                    await client.send_message(target, ad_text)
 
-                                logger.info(f"[SENT] ✅ Account {acc['id']} -> {group_link}")
+                                logger.info(f"[SENT] ✅ Account {acc['id']} -> {group['name']}")
                                 
                                 # انتظر بعد كل رسالة
                                 await asyncio.sleep(self.publish_delay)
@@ -217,11 +270,15 @@ class TelegramBotManager:
                                 await asyncio.sleep(e.seconds)
 
                             except Exception as e:
-                                logger.error(f"[SEND ERROR] {e}")
-                                await asyncio.sleep(5)
+                                logger.error(f"[SEND ERROR] to {group['name']}: {e}")
+                                await asyncio.sleep(3)
 
                 # انتظر بين كل دورة كاملة
-                logger.info("🔄 Cycle completed, waiting 60 seconds...")
+                logger.info("🔄 Cycle completed, refreshing groups and waiting 60 seconds...")
+                
+                # مسح الكاش للحصول على المجموعات الجديدة في الدورة التالية
+                self.groups_cache.clear()
+                
                 await asyncio.sleep(60)
 
         except asyncio.CancelledError:
@@ -236,93 +293,99 @@ class TelegramBotManager:
     # ==================================================
 
     async def test_publish_once(self, update, context):
-        """تجربة نشر رسالة تجريبية مرة واحدة"""
+        """تجربة نشر رسالة تجريبية في جميع المجموعات"""
         
         admin_id = update.effective_user.id
         
-        # جلب البيانات
         accounts = self.db.get_accounts(admin_id)
-        groups = self.db.get_groups(admin_id)
-        
-        # تصفية العناصر النشطة
         active_accounts = [a for a in accounts if a['active'] == 1]
-        active_groups = [g for g in groups if g['status'] == 'active']
         
         if not active_accounts:
             await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
             return
-            
-        if not active_groups:
-            await update.message.reply_text("❌ لا يوجد مجموعات مفعلة")
-            return
         
-        await update.message.reply_text("⏳ جاري تجربة النشر...")
+        await update.message.reply_text("⏳ جاري جلب المجموعات وتجربة النشر...")
         
+        total_groups = 0
         sent_count = 0
-        errors = []
         
-        # جرب أول حساب وأول مجموعة فقط
-        for acc in active_accounts[:1]:
+        for acc in active_accounts:
             session_string = acc['session']
+            
+            # جلب المجموعات
+            groups = await self.fetch_all_groups(session_string)
+            total_groups += len(groups)
+            
+            if not groups:
+                await update.message.reply_text(f"⚠️ لا توجد مجموعات في الحساب {acc['id']}")
+                continue
             
             try:
                 client = await self.get_client(session_string)
                 me = await client.get_me()
                 
-                for group in active_groups[:1]:
-                    group_link = group['link']
+                # جرب أول 3 مجموعات فقط للتجربة
+                for group in groups[:3]:
+                    target = f"@{group['username']}" if group['username'] else group['chat_id']
                     
                     try:
                         await client.send_message(
-                            group_link, 
-                            "🧪 رسالة تجربة من البوت ✅\n\nالبوت يعمل بشكل جيد!"
+                            target, 
+                            "🧪 **رسالة تجربة من البوت** ✅\n\nالبوت يعمل بشكل جيد وسينشر في جميع المجموعات تلقائياً!"
                         )
                         sent_count += 1
-                        await update.message.reply_text(f"✅ تم الإرسال إلى {group_link}")
+                        await update.message.reply_text(f"✅ تم الإرسال إلى: {group['name']}")
                         
                     except Exception as e:
-                        error_msg = f"❌ فشل الإرسال إلى {group_link}: {str(e)[:50]}"
-                        errors.append(error_msg)
-                        await update.message.reply_text(error_msg)
+                        await update.message.reply_text(f"❌ فشل الإرسال إلى {group['name']}: {str(e)[:50]}")
                         
             except Exception as e:
                 await update.message.reply_text(f"❌ خطأ في الحساب: {str(e)[:50]}")
         
-        if sent_count > 0:
-            await update.message.reply_text(f"✅ تم إرسال {sent_count} رسالة تجريبية بنجاح")
-        else:
-            await update.message.reply_text(f"❌ فشل الإرسال: {', '.join(errors)}")
+        await update.message.reply_text(
+            f"📊 **النتيجة النهائية:**\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"📦 إجمالي المجموعات: {total_groups}\n"
+            f"✅ تم الإرسال إلى: {sent_count} مجموعة\n"
+            f"🚀 البوت جاهز للنشر الكامل!"
+        )
 
 
-    async def test_account_connection(self, update, context, account_id: int):
-        """اختبار اتصال حساب معين"""
+    async def show_all_groups(self, update, context):
+        """عرض جميع المجموعات من جميع الحسابات"""
         
         admin_id = update.effective_user.id
         accounts = self.db.get_accounts(admin_id)
+        active_accounts = [a for a in accounts if a['active'] == 1]
         
-        account = None
-        for acc in accounts:
-            if acc['id'] == account_id:
-                account = acc
-                break
-        
-        if not account:
-            await update.message.reply_text("❌ الحساب غير موجود")
+        if not active_accounts:
+            await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
             return
         
-        await update.message.reply_text("⏳ جاري اختبار الاتصال...")
+        await update.message.reply_text("⏳ جاري جلب المجموعات...")
         
-        try:
-            client = await self.get_client(account['session'])
-            me = await client.get_me()
-            await update.message.reply_text(
-                f"✅ الحساب يعمل بشكل جيد\n\n"
-                f"👤 الاسم: {me.first_name}\n"
-                f"📝 المعرف: @{me.username}\n"
-                f"🆔 الايدي: {me.id}"
-            )
-        except Exception as e:
-            await update.message.reply_text(f"❌ خطأ في الاتصال: {str(e)[:100]}")
+        result = "📋 **جميع المجموعات في حساباتك:**\n\n"
+        
+        for acc in active_accounts:
+            session_string = acc['session']
+            groups = await self.fetch_all_groups(session_string)
+            
+            result += f"👤 **الحساب {acc['id']}**:\n"
+            result += f"📦 عدد المجموعات: {len(groups)}\n\n"
+            
+            # عرض أول 20 مجموعة
+            for i, group in enumerate(groups[:20], 1):
+                result += f"  {i}. {group['name'][:40]}\n"
+            
+            if len(groups) > 20:
+                result += f"  ... و {len(groups) - 20} مجموعة أخرى\n"
+            
+            result += "\n" + "━" * 30 + "\n\n"
+        
+        if len(result) > 4000:
+            result = result[:4000] + "\n\n... تم اقتصار العرض"
+        
+        await update.message.reply_text(result, parse_mode='Markdown')
 
 
     # ==================================================
@@ -340,26 +403,17 @@ class TelegramBotManager:
     # ==================================================
 
     def is_publishing(self, admin_id: int) -> bool:
-        """التحقق من حالة النشر"""
         return admin_id in self.publish_tasks
 
 
     def get_status(self, admin_id: int) -> dict:
-        """الحصول على حالة النشر كاملة"""
         accounts = self.db.get_accounts(admin_id)
-        ads = self.db.get_ads(admin_id)
-        groups = self.db.get_groups(admin_id)
-        
-        active_accounts = len([a for a in accounts if a['active'] == 1])
-        active_groups = len([g for g in groups if g['status'] == 'active'])
+        active_accounts = [a for a in accounts if a['active'] == 1]
         
         return {
             "is_publishing": admin_id in self.publish_tasks,
             "accounts_count": len(accounts),
-            "active_accounts": active_accounts,
-            "ads_count": len(ads),
-            "groups_count": len(groups),
-            "active_groups": active_groups,
+            "active_accounts": len(active_accounts),
             "publish_delay": self.publish_delay
         }
 
@@ -369,16 +423,10 @@ class TelegramBotManager:
     # ==================================================
 
     async def shutdown(self):
-        """إيقاف جميع المهام وإغلاق الاتصالات"""
-
-        for admin_id, task in self.publish_tasks.items():
+        for task in self.publish_tasks.values():
             task.cancel()
-            logger.info(f"[SHUTDOWN] Cancelled publish task for admin {admin_id}")
-
-        for session_string, client in self.clients.items():
+        for client in self.clients.values():
             await client.disconnect()
-            logger.info(f"[SHUTDOWN] Disconnected client")
-
         self.publish_tasks.clear()
         self.clients.clear()
-        logger.info("[SHUTDOWN] Complete")
+        self.groups_cache.clear()
