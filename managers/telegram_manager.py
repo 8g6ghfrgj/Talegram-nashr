@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 # TELETHON CREDENTIALS
 # =========================
 
-API_ID = 123456        # ضع api_id الحقيقي من my.telegram.org
-API_HASH = "API_HASH"  # ضع api_hash الحقيقي من my.telegram.org
+API_ID = 36658136        # ضع api_id الحقيقي من my.telegram.org
+API_HASH = "b06f6af26c3938d019af883d38d3c103"  # ضع api_hash الحقيقي من my.telegram.org
 
 
 # =========================
