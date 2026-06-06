@@ -84,12 +84,15 @@ class TelegramBotManager:
             async for dialog in client.iter_dialogs():
                 # جلب المجموعات فقط (groups, supergroups, channels)
                 if dialog.is_group or dialog.is_channel:
+                    # استخدام getattr للحصول على username بأمان (تجنب الخطأ إذا لم يكن موجوداً)
+                    username = getattr(dialog.entity, "username", None)
+                    
                     group_info = {
                         'id': dialog.id,
                         'name': dialog.name,
                         'title': dialog.title,
-                        'username': dialog.entity.username,
-                        'link': f"https://t.me/{dialog.entity.username}" if dialog.entity.username else None,
+                        'username': username,
+                        'link': f"https://t.me/{username}" if username else None,
                         'chat_id': dialog.entity.id,
                         'is_group': dialog.is_group,
                         'is_channel': dialog.is_channel,
@@ -345,7 +348,11 @@ class TelegramBotManager:
                 
                 # جرب أول 3 مجموعات فقط للتجربة
                 for group in groups[:3]:
-                    target = f"@{group['username']}" if group['username'] else group['chat_id']
+                    # استخدام username إذا موجود وإلا استخدام chat_id
+                    if group['username']:
+                        target = f"@{group['username']}"
+                    else:
+                        target = group['chat_id']
                     
                     try:
                         await client.send_message(
@@ -394,7 +401,9 @@ class TelegramBotManager:
             
             # عرض أول 20 مجموعة
             for i, group in enumerate(groups[:20], 1):
-                result += f"  {i}. {group['name'][:40]}\n"
+                # عرض الرابط إذا موجود
+                link_display = f"🔗 {group['link']}" if group['link'] else "🔒 مجموعة خاصة"
+                result += f"  {i}. {group['name'][:40]}\n     {link_display}\n"
             
             if len(groups) > 20:
                 result += f"  ... و {len(groups) - 20} مجموعة أخرى\n"
