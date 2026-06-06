@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 # TELETHON CREDENTIALS
 # =========================
 
-API_ID = 123456        # ضع api_id الحقيقي
-API_HASH = "API_HASH"  # ضع api_hash الحقيقي
+API_ID = 123456        # ضع api_id الحقيقي من my.telegram.org
+API_HASH = "API_HASH"  # ضع api_hash الحقيقي من my.telegram.org
 
 
 # =========================
@@ -33,7 +33,7 @@ class TelegramBotManager:
         self.clients = {}
 
         # default delay (seconds)
-        self.publish_delay = 60.0  # تغيير إلى 60 ثانية بين كل رسالة
+        self.publish_delay = 60.0  # 60 ثانية بين كل رسالة
 
 
     # ==================================================
@@ -91,7 +91,7 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # MAIN PUBLISH LOOP (REAL)
+    # MAIN PUBLISH LOOP
     # ==================================================
 
     async def _publish_loop(self, admin_id: int):
@@ -102,9 +102,11 @@ class TelegramBotManager:
             while True:
 
                 # جلب البيانات من قاعدة البيانات
-                accounts = self.db.get_accounts()
-                ads = self.db.get_ads()
-                groups = self.db.get_groups()
+                accounts = self.db.get_accounts(admin_id)
+                ads = self.db.get_ads(admin_id)
+                groups = self.db.get_groups(admin_id)
+
+                logger.info(f"📊 Raw data - Accounts: {len(accounts)}, Ads: {len(ads)}, Groups: {len(groups)}")
 
                 # تحقق من صحة البيانات
                 if not accounts:
@@ -123,14 +125,24 @@ class TelegramBotManager:
                     continue
 
                 # تصفية الحسابات والمجموعات والإعلانات النشطة
-                active_accounts = [a for a in accounts if a.get('active', 0) == 1]
-                active_groups = [g for g in groups if g.get('active', 0) == 1]
-                active_ads = [a for a in ads if a.get('active', 0) == 1]
+                active_accounts = [a for a in accounts if a['active'] == 1]
+                active_groups = [g for g in groups if g['status'] == 'active']
+                active_ads = [a for a in ads if a['active'] == 1] if 'active' in ads[0].keys() else ads
 
-                logger.info(f"Active accounts: {len(active_accounts)}, Active groups: {len(active_groups)}, Active ads: {len(active_ads)}")
+                logger.info(f"✅ Active accounts: {len(active_accounts)}, Active groups: {len(active_groups)}, Active ads: {len(active_ads)}")
 
-                if not active_accounts or not active_groups or not active_ads:
-                    logger.warning("Missing active accounts, groups or ads")
+                if not active_accounts:
+                    logger.warning("No active accounts")
+                    await asyncio.sleep(30)
+                    continue
+                    
+                if not active_groups:
+                    logger.warning("No active groups")
+                    await asyncio.sleep(30)
+                    continue
+                    
+                if not active_ads:
+                    logger.warning("No active ads")
                     await asyncio.sleep(30)
                     continue
 
@@ -139,38 +151,39 @@ class TelegramBotManager:
                 random.shuffle(active_ads)
                 random.shuffle(active_groups)
 
-                # حلقة واحدة: حساب ← إعلان ← مجموعة واحدة فقط ثم انتقل
+                # حلقة النشر
                 for acc in active_accounts:
                     
-                    session_string = acc.get('session_string') or acc.get('session')
+                    # الوصول إلى session من العمود 'session'
+                    session_string = acc['session']
                     
                     if not session_string:
-                        logger.error(f"No session for account: {acc}")
+                        logger.error(f"No session for account ID: {acc['id']}")
                         continue
 
                     try:
                         client = await self.get_client(session_string)
-                        logger.info(f"Connected to account: {acc.get('username', 'Unknown')}")
+                        logger.info(f"✅ Connected to account ID: {acc['id']}")
                     except Exception as e:
                         logger.error(f"[SESSION ERROR] {e}")
                         continue
 
                     for ad in active_ads:
                         
-                        ad_type = ad.get('type', 'text')
-                        ad_text = ad.get('content', '') or ad.get('text', '')
-                        ad_media = ad.get('media', None)
+                        ad_type = ad['type']  # 'text', 'photo', 'contact'
+                        ad_text = ad['text'] or ""
+                        ad_media = ad['media_path'] or None
 
                         for group in active_groups:
                             
-                            group_link = group.get('link') or group.get('username') or group.get('group_id')
+                            group_link = group['link']
                             
                             if not group_link:
-                                logger.error(f"No link for group: {group}")
+                                logger.error(f"No link for group ID: {group['id']}")
                                 continue
 
                             try:
-                                logger.info(f"Sending to {group_link} from {acc.get('username', 'Unknown')}")
+                                logger.info(f"📤 Sending to {group_link} from account {acc['id']}")
                                 
                                 if ad_type == "text":
                                     await client.send_message(group_link, ad_text)
@@ -194,7 +207,7 @@ class TelegramBotManager:
                                 else:
                                     await client.send_message(group_link, ad_text)
 
-                                logger.info(f"[SENT] ✅ {acc.get('username')} -> {group_link}")
+                                logger.info(f"[SENT] ✅ Account {acc['id']} -> {group_link}")
                                 
                                 # انتظر بعد كل رسالة
                                 await asyncio.sleep(self.publish_delay)
@@ -208,7 +221,7 @@ class TelegramBotManager:
                                 await asyncio.sleep(5)
 
                 # انتظر بين كل دورة كاملة
-                logger.info("Cycle completed, waiting 60 seconds...")
+                logger.info("🔄 Cycle completed, waiting 60 seconds...")
                 await asyncio.sleep(60)
 
         except asyncio.CancelledError:
@@ -217,67 +230,155 @@ class TelegramBotManager:
         except Exception as e:
             logger.exception(f"[PUBLISH LOOP ERROR] {e}")
 
+
     # ==================================================
     # TEST PUBLISH (للتجربة)
     # ==================================================
 
-    async def test_publish_once(self, admin_id: int) -> str:
-        """تجربة نشر مرة واحدة"""
+    async def test_publish_once(self, update, context):
+        """تجربة نشر رسالة تجريبية مرة واحدة"""
         
-        accounts = self.db.get_accounts()
-        ads = self.db.get_ads()
-        groups = self.db.get_groups()
+        admin_id = update.effective_user.id
         
-        active_accounts = [a for a in accounts if a.get('active', 0) == 1]
-        active_groups = [g for g in groups if g.get('active', 0) == 1]
-        active_ads = [a for a in ads if a.get('active', 0) == 1]
+        # جلب البيانات
+        accounts = self.db.get_accounts(admin_id)
+        groups = self.db.get_groups(admin_id)
+        
+        # تصفية العناصر النشطة
+        active_accounts = [a for a in accounts if a['active'] == 1]
+        active_groups = [g for g in groups if g['status'] == 'active']
         
         if not active_accounts:
-            return "❌ لا يوجد حسابات مفعلة"
+            await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
+            return
+            
         if not active_groups:
-            return "❌ لا يوجد مجموعات مفعلة"
-        if not active_ads:
-            return "❌ لا يوجد إعلانات مفعلة"
+            await update.message.reply_text("❌ لا يوجد مجموعات مفعلة")
+            return
+        
+        await update.message.reply_text("⏳ جاري تجربة النشر...")
         
         sent_count = 0
+        errors = []
         
-        for acc in active_accounts[:1]:  # جرب أول حساب فقط
-            session_string = acc.get('session_string') or acc.get('session')
+        # جرب أول حساب وأول مجموعة فقط
+        for acc in active_accounts[:1]:
+            session_string = acc['session']
             
             try:
                 client = await self.get_client(session_string)
+                me = await client.get_me()
                 
-                for ad in active_ads[:1]:  # جرب أول إعلان فقط
-                    ad_text = ad.get('content', '') or ad.get('text', '')
+                for group in active_groups[:1]:
+                    group_link = group['link']
                     
-                    for group in active_groups[:1]:  # جرب أول مجموعة فقط
-                        group_link = group.get('link') or group.get('username')
+                    try:
+                        await client.send_message(
+                            group_link, 
+                            "🧪 رسالة تجربة من البوت ✅\n\nالبوت يعمل بشكل جيد!"
+                        )
+                        sent_count += 1
+                        await update.message.reply_text(f"✅ تم الإرسال إلى {group_link}")
                         
-                        try:
-                            await client.send_message(group_link, "🧪 رسالة تجربة من البوت")
-                            sent_count += 1
-                            logger.info(f"Test message sent to {group_link}")
-                        except Exception as e:
-                            logger.error(f"Test send error: {e}")
-                            return f"❌ فشل الإرسال: {str(e)[:50]}"
-                            
+                    except Exception as e:
+                        error_msg = f"❌ فشل الإرسال إلى {group_link}: {str(e)[:50]}"
+                        errors.append(error_msg)
+                        await update.message.reply_text(error_msg)
+                        
             except Exception as e:
-                return f"❌ خطأ في الحساب: {str(e)[:50]}"
+                await update.message.reply_text(f"❌ خطأ في الحساب: {str(e)[:50]}")
         
-        return f"✅ تم إرسال {sent_count} رسالة تجريبية"
+        if sent_count > 0:
+            await update.message.reply_text(f"✅ تم إرسال {sent_count} رسالة تجريبية بنجاح")
+        else:
+            await update.message.reply_text(f"❌ فشل الإرسال: {', '.join(errors)}")
+
+
+    async def test_account_connection(self, update, context, account_id: int):
+        """اختبار اتصال حساب معين"""
+        
+        admin_id = update.effective_user.id
+        accounts = self.db.get_accounts(admin_id)
+        
+        account = None
+        for acc in accounts:
+            if acc['id'] == account_id:
+                account = acc
+                break
+        
+        if not account:
+            await update.message.reply_text("❌ الحساب غير موجود")
+            return
+        
+        await update.message.reply_text("⏳ جاري اختبار الاتصال...")
+        
+        try:
+            client = await self.get_client(account['session'])
+            me = await client.get_me()
+            await update.message.reply_text(
+                f"✅ الحساب يعمل بشكل جيد\n\n"
+                f"👤 الاسم: {me.first_name}\n"
+                f"📝 المعرف: @{me.username}\n"
+                f"🆔 الايدي: {me.id}"
+            )
+        except Exception as e:
+            await update.message.reply_text(f"❌ خطأ في الاتصال: {str(e)[:100]}")
 
 
     # ==================================================
-    # CLEANUP (OPTIONAL)
+    # SETTINGS
+    # ==================================================
+
+    def set_publish_delay(self, delay_seconds: float):
+        """تغيير وقت التأخير بين الرسائل"""
+        self.publish_delay = delay_seconds
+        logger.info(f"[SETTINGS] Publish delay set to {delay_seconds} seconds")
+
+
+    # ==================================================
+    # STATUS
+    # ==================================================
+
+    def is_publishing(self, admin_id: int) -> bool:
+        """التحقق من حالة النشر"""
+        return admin_id in self.publish_tasks
+
+
+    def get_status(self, admin_id: int) -> dict:
+        """الحصول على حالة النشر كاملة"""
+        accounts = self.db.get_accounts(admin_id)
+        ads = self.db.get_ads(admin_id)
+        groups = self.db.get_groups(admin_id)
+        
+        active_accounts = len([a for a in accounts if a['active'] == 1])
+        active_groups = len([g for g in groups if g['status'] == 'active'])
+        
+        return {
+            "is_publishing": admin_id in self.publish_tasks,
+            "accounts_count": len(accounts),
+            "active_accounts": active_accounts,
+            "ads_count": len(ads),
+            "groups_count": len(groups),
+            "active_groups": active_groups,
+            "publish_delay": self.publish_delay
+        }
+
+
+    # ==================================================
+    # CLEANUP
     # ==================================================
 
     async def shutdown(self):
+        """إيقاف جميع المهام وإغلاق الاتصالات"""
 
-        for task in self.publish_tasks.values():
+        for admin_id, task in self.publish_tasks.items():
             task.cancel()
+            logger.info(f"[SHUTDOWN] Cancelled publish task for admin {admin_id}")
 
-        for client in self.clients.values():
+        for session_string, client in self.clients.items():
             await client.disconnect()
+            logger.info(f"[SHUTDOWN] Disconnected client")
 
         self.publish_tasks.clear()
         self.clients.clear()
+        logger.info("[SHUTDOWN] Complete")
