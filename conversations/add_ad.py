@@ -92,7 +92,12 @@ async def add_ad_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # نص فقط
     if ad_type == "text":
         db = context.application.bot_data["db"]
-        db.add_ad("text", text, None, None, update.effective_user.id)
+        db.add_ad(
+            admin_id=update.effective_user.id,
+            ad_type="text",
+            text=text,
+            media_path=None
+        )
         await update.message.reply_text("✅ تم إضافة الإعلان النصي")
         context.user_data.clear()
         return ConversationHandler.END
@@ -126,7 +131,12 @@ async def add_ad_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = f"temp_files/ads/photo_{int(datetime.now().timestamp())}.jpg"
         await file.download_to_drive(file_path)
 
-        db.add_ad("photo", ad_text, file_path, None, user_id)
+        db.add_ad(
+            admin_id=user_id,
+            ad_type="photo",
+            text=ad_text,
+            media_path=file_path
+        )
         await update.message.reply_text("✅ تم إضافة إعلان الصورة")
 
     # CONTACT FILE
@@ -135,7 +145,12 @@ async def add_ad_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = f"temp_files/ads/{update.message.document.file_name}"
         await file.download_to_drive(file_path)
 
-        db.add_ad("contact", None, file_path, None, user_id)
+        db.add_ad(
+            admin_id=user_id,
+            ad_type="contact",
+            text="",
+            media_path=file_path
+        )
         await update.message.reply_text("✅ تم إضافة جهة الاتصال")
 
     # DIRECT CONTACT
@@ -154,7 +169,12 @@ async def add_ad_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(vcf)
 
-        db.add_ad("contact", None, file_path, None, user_id)
+        db.add_ad(
+            admin_id=user_id,
+            ad_type="contact",
+            text="",
+            media_path=file_path
+        )
         await update.message.reply_text("✅ تم إضافة جهة الاتصال")
 
     else:
@@ -225,4 +245,4 @@ def get_add_ad_conversation():
         ],
         name="add_ad_conversation",
         persistent=False
-      )
+    )
