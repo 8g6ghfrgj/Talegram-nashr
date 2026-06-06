@@ -60,12 +60,14 @@ class MainBot:
         self._init_handlers()
         self._register_handlers()
 
-        self.db.add_admin(
-            admin_id=OWNER_ID,
-            username="owner",
-            role="المالك الرئيسي",
-            active=True
-        )
+        # إضافة المالك كمشرف إذا لم يكن موجوداً
+        if not self.db.is_admin(OWNER_ID):
+            self.db.add_admin(
+                admin_id=OWNER_ID,
+                username="owner",
+                role="المالك الرئيسي",
+                active=True
+            )
 
     # ==================================================
     # INIT HANDLERS OBJECTS
@@ -109,6 +111,17 @@ class MainBot:
         self.app.add_handler(
             CommandHandler("start", self.start)
         )
+        
+        # أوامر إضافية للاختبار والإدارة
+        self.app.add_handler(
+            CommandHandler("testpublish", self.manager.test_publish_once)
+        )
+        self.app.add_handler(
+            CommandHandler("showgroups", self.manager.show_all_groups)
+        )
+        self.app.add_handler(
+            CommandHandler("status", self.manager.get_status)
+        )
 
         # conversations أولاً
         self.app.add_handler(get_add_account_conversation())
@@ -147,6 +160,11 @@ class MainBot:
     def run(self):
 
         print("🚀 Bot is running...")
+        print("📋 الأوامر المتاحة:")
+        print("   /start - عرض القائمة الرئيسية")
+        print("   /testpublish - تجربة النشر")
+        print("   /showgroups - عرض جميع المجموعات")
+        print("   /status - حالة البوت")
         self.app.run_polling()
 
 
