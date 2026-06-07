@@ -1,6 +1,5 @@
 import sys
 import logging
-import asyncio
 
 from telegram import Update
 from telegram.ext import (
@@ -108,20 +107,26 @@ class MainBot:
 
     def _register_handlers(self):
 
-        # Basic commands
-        self.app.add_handler(CommandHandler("start", self.start))
-
-        # Publishing control commands (NEW)
-        self.app.add_handler(CommandHandler("start_publish", self.manager.start_publish_command))
-        self.app.add_handler(CommandHandler("stop_publish", self.manager.stop_publish_command))
-        self.app.add_handler(CommandHandler("set_delay", self.manager.set_delay_command))
+        # الأوامر الأساسية
+        self.app.add_handler(
+            CommandHandler("start", self.start)
+        )
         
-        # Test and info commands
-        self.app.add_handler(CommandHandler("testpublish", self.manager.test_publish_once))
-        self.app.add_handler(CommandHandler("showgroups", self.manager.show_all_groups))
-        self.app.add_handler(CommandHandler("status", self.manager.get_status))
+        # أوامر الاختبار والإدارة
+        self.app.add_handler(
+            CommandHandler("testpublish", self.manager.test_publish_once)
+        )
+        self.app.add_handler(
+            CommandHandler("showgroups", self.manager.show_all_groups)
+        )
+        self.app.add_handler(
+            CommandHandler("status", self.manager.get_status)
+        )
+        self.app.add_handler(
+            CommandHandler("refresh", self.manager.refresh_all_groups)
+        )
 
-        # Conversations أولاً
+        # المحادثات (Conversations) - تسجل أولاً
         self.app.add_handler(get_add_account_conversation())
         self.app.add_handler(get_add_admin_conversation())
         self.app.add_handler(get_add_ad_conversation())
@@ -129,10 +134,10 @@ class MainBot:
         self.app.add_handler(get_add_reply_conversation())
         self.app.add_handler(get_set_publish_delay_conversation())
 
-        # Menus أخيراً
+        # القوائم (Menus) - تسجل أخيراً
         register_menu_handlers(self.app)
 
-        # Error handler
+        # معالج الأخطاء
         self.app.add_error_handler(self.error_handler)
 
     # ==================================================
@@ -160,14 +165,15 @@ class MainBot:
         print("🚀 Bot is running...")
         print("📋 الأوامر المتاحة:")
         print("   /start - عرض القائمة الرئيسية")
-        print("   /start_publish - بدء النشر التلقائي السريع (في جميع المجموعات وجميع الحسابات)")
-        print("   /stop_publish - إيقاف النشر التلقائي")
-        print("   /set_delay <ثواني> - تغيير وقت التأخير بين الرسائل (مثال: /set_delay 2)")
-        print("   /testpublish - تجربة النشر (أول 3 مجموعات فقط)")
-        print("   /showgroups - عرض جميع المجموعات من جميع الحسابات")
+        print("   /testpublish - تجربة النشر السريع")
+        print("   /showgroups - عرض جميع المجموعات")
         print("   /status - حالة البوت")
-
-        # بدء تشغيل البوت (polling)
+        print("   /refresh - تحديث المجموعات")
+        print("")
+        print("⚡ وضع النشر: فائق السرعة")
+        print("👥 دعم حسابات متعددة")
+        print("📢 نشر متوازي على جميع المجموعات")
+        
         self.app.run_polling()
 
 
