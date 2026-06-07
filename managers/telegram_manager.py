@@ -44,23 +44,42 @@ class TelegramBotManager:
     # ==================================================
 
     async def get_client(self, session_string: str) -> TelegramClient:
-
+        """
+        الحصول على عميل Telethon مع التحقق من صحة session_string
+        """
+        # التحقق من صحة session_string
+        if not session_string or not isinstance(session_string, str):
+            raise ValueError(f"Invalid session_string: {type(session_string)} - must be a non-empty string")
+        
         if session_string in self.clients:
-            return self.clients[session_string]
-
-        client = TelegramClient(
-            StringSession(session_string),
-            API_ID,
-            API_HASH
-        )
-
-        await client.connect()
-
-        if not await client.is_user_authorized():
-            raise RuntimeError("Session not authorized")
-
-        self.clients[session_string] = client
-        return client
+            # التحقق من أن العميل لا يزال متصلاً
+            client = self.clients[session_string]
+            if client.is_connected():
+                return client
+            else:
+                # إعادة الاتصال إذا لزم الأمر
+                await client.connect()
+                if await client.is_user_authorized():
+                    return client
+                else:
+                    # إزالة العميل غير الصالح
+                    del self.clients[session_string]
+        
+        try:
+            client = TelegramClient(
+                StringSession(session_string),
+                API_ID,
+                API_HASH
+            )
+            await client.connect()
+            if not await client.is_user_authorized():
+                raise RuntimeError("Session not authorized")
+            self.clients[session_string] = client
+            logger.info("Client created and connected successfully")
+            return client
+        except Exception as e:
+            logger.error(f"Failed to create client for session: {e}")
+            raise
 
 
     # ==================================================
@@ -68,7 +87,13 @@ class TelegramBotManager:
     # ==================================================
 
     async def fetch_all_groups(self, session_string: str) -> list:
-        """جلب جميع المجموعات التي فيها الحساب"""
+        """
+        جلب جميع المجموعات التي فيها الحساب مع التحقق من صحة الجلسة
+        """
+        # التحقق من صحة session_string أولاً
+        if not session_string or not isinstance(session_string, str):
+            logger.error(f"Invalid session_string provided: {type(session_string)}")
+            return []
         
         # تحقق من الكاش أولاً
         if session_string in self.groups_cache:
@@ -84,13 +109,17 @@ class TelegramBotManager:
             async for dialog in client.iter_dialogs():
                 # جلب المجموعات فقط (groups, supergroups, channels)
                 if dialog.is_group or dialog.is_channel:
-                    # استخدام getattr للحصول على username بأمان (تجنب الخطأ إذا لم يكن موجوداً)
+                    # استخدام getattr للحصول على username بأمان
                     username = getattr(dialog.entity, "username", None)
+                    
+                    # تحويل الأسماء إلى نصوص بشكل آمن
+                    name = str(dialog.name) if dialog.name else "بدون اسم"
+                    title = str(dialog.title) if dialog.title else name
                     
                     group_info = {
                         'id': dialog.id,
-                        'name': dialog.name,
-                        'title': dialog.title,
+                        'name': name,
+                        'title': title,
                         'username': username,
                         'link': f"https://t.me/{username}" if username else None,
                         'chat_id': dialog.entity.id,
@@ -99,7 +128,7 @@ class TelegramBotManager:
                         'participants_count': getattr(dialog.entity, 'participants_count', 0)
                     }
                     groups.append(group_info)
-                    logger.debug(f"Found group: {dialog.name}")
+                    logger.debug(f"Found group: {name}")
             
             # تخزين في الكاش
             self.groups_cache[session_string] = groups
@@ -107,8 +136,11 @@ class TelegramBotManager:
             
             return groups
             
+        except ValueError as ve:
+            logger.error(f"Value error in fetch_all_groups: {ve}")
+            return []
         except Exception as e:
-            logger.error(f"Error fetching groups: {e}")
+            logger.error(f"Error fetching groups: {e}", exc_info=True)
             return []
 
 
@@ -129,7 +161,12 @@ class TelegramBotManager:
         total_groups = 0
         
         for acc in active_accounts:
-            session_string = acc['session']
+            session_string = acc.get('session')  # استخدام get لتجنب KeyError
+            if not session_string:
+                logger.warning(f"Account {acc['id']} has no session string")
+                await update.message.reply_text(f"⚠️ الحساب {acc['id']} ليس لديه جلسة صالحة")
+                continue
+                
             # مسح الكاش للحصول على بيانات جديدة
             if session_string in self.groups_cache:
                 del self.groups_cache[session_string]
@@ -190,22 +227,13 @@ class TelegramBotManager:
                 ads = self.db.get_ads(admin_id)
 
                 # تصفية الحسابات النشطة
-                active_accounts = [a for a in accounts if a['active'] == 1]
+                active_accounts = [a for a in accounts if a.get('active') == 1 and a.get('session')]
                 
                 # تصفية الإعلانات النشطة
-                active_ads = []
-                for ad in ads:
-                    try:
-                        if 'active' in ad.keys():
-                            if ad['active'] == 1:
-                                active_ads.append(ad)
-                        else:
-                            active_ads.append(ad)
-                    except:
-                        active_ads.append(ad)
+                active_ads = [ad for ad in ads if ad.get('active') == 1]
 
                 if not active_accounts:
-                    logger.warning("No active accounts")
+                    logger.warning("No active accounts with valid sessions")
                     await asyncio.sleep(30)
                     continue
                     
@@ -217,12 +245,8 @@ class TelegramBotManager:
                 # لكل حساب، جلب جميع المجموعات التي فيه
                 for acc in active_accounts:
                     
-                    session_string = acc['session']
+                    session_string = acc['session']  # آمن لأننا قمنا بالفلترة
                     
-                    if not session_string:
-                        logger.error(f"No session for account ID: {acc['id']}")
-                        continue
-
                     # جلب جميع المجموعات من هذا الحساب
                     groups = await self.fetch_all_groups(session_string)
                     
@@ -236,7 +260,7 @@ class TelegramBotManager:
                         client = await self.get_client(session_string)
                         logger.info(f"✅ Connected to account ID: {acc['id']}")
                     except Exception as e:
-                        logger.error(f"[SESSION ERROR] {e}")
+                        logger.error(f"[SESSION ERROR] Account {acc['id']}: {e}")
                         continue
 
                     # خلط الترتيب
@@ -246,14 +270,14 @@ class TelegramBotManager:
                     # النشر في جميع المجموعات
                     for ad in active_ads:
                         
-                        ad_type = ad['type']
-                        ad_text = ad['text'] or ""
-                        ad_media = ad['media_path'] or None
+                        ad_type = ad.get('type', 'text')
+                        ad_text = ad.get('text') or ""
+                        ad_media = ad.get('media_path') or None
 
                         for group in groups:
                             
                             # تحديد طريقة الإرسال
-                            if group['username']:
+                            if group.get('username'):
                                 target = f"@{group['username']}"
                             else:
                                 target = group['chat_id']
@@ -321,10 +345,10 @@ class TelegramBotManager:
         admin_id = update.effective_user.id
         
         accounts = self.db.get_accounts(admin_id)
-        active_accounts = [a for a in accounts if a['active'] == 1]
+        active_accounts = [a for a in accounts if a.get('active') == 1 and a.get('session')]
         
         if not active_accounts:
-            await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
+            await update.message.reply_text("❌ لا يوجد حسابات مفعلة أو جلسات صالحة")
             return
         
         await update.message.reply_text("⏳ جاري جلب المجموعات وتجربة النشر...")
@@ -348,8 +372,7 @@ class TelegramBotManager:
                 
                 # جرب أول 3 مجموعات فقط للتجربة
                 for group in groups[:3]:
-                    # استخدام username إذا موجود وإلا استخدام chat_id
-                    if group['username']:
+                    if group.get('username'):
                         target = f"@{group['username']}"
                     else:
                         target = group['chat_id']
@@ -366,7 +389,7 @@ class TelegramBotManager:
                         await update.message.reply_text(f"❌ فشل الإرسال إلى {group['name']}: {str(e)[:50]}")
                         
             except Exception as e:
-                await update.message.reply_text(f"❌ خطأ في الحساب: {str(e)[:50]}")
+                await update.message.reply_text(f"❌ خطأ في الحساب {acc['id']}: {str(e)[:50]}")
         
         await update.message.reply_text(
             f"📊 **النتيجة النهائية:**\n"
@@ -382,10 +405,10 @@ class TelegramBotManager:
         
         admin_id = update.effective_user.id
         accounts = self.db.get_accounts(admin_id)
-        active_accounts = [a for a in accounts if a['active'] == 1]
+        active_accounts = [a for a in accounts if a.get('active') == 1 and a.get('session')]
         
         if not active_accounts:
-            await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
+            await update.message.reply_text("❌ لا يوجد حسابات مفعلة أو جلسات صالحة")
             return
         
         await update.message.reply_text("⏳ جاري جلب المجموعات...")
@@ -401,8 +424,7 @@ class TelegramBotManager:
             
             # عرض أول 20 مجموعة
             for i, group in enumerate(groups[:20], 1):
-                # عرض الرابط إذا موجود
-                link_display = f"🔗 {group['link']}" if group['link'] else "🔒 مجموعة خاصة"
+                link_display = f"🔗 {group['link']}" if group.get('link') else "🔒 مجموعة خاصة"
                 result += f"  {i}. {group['name'][:40]}\n     {link_display}\n"
             
             if len(groups) > 20:
@@ -424,7 +446,7 @@ class TelegramBotManager:
         accounts = self.db.get_accounts(admin_id)
         ads = self.db.get_ads(admin_id)
         
-        active_accounts = [a for a in accounts if a['active'] == 1]
+        active_accounts = [a for a in accounts if a.get('active') == 1 and a.get('session')]
         
         is_publishing = admin_id in self.publish_tasks
         
@@ -433,7 +455,7 @@ class TelegramBotManager:
 ━━━━━━━━━━━━━━━━━━━
 🚀 حالة النشر: {'✅ شغال' if is_publishing else '⭕ متوقف'}
 👥 عدد الحسابات: {len(accounts)}
-✅ الحسابات المفعلة: {len(active_accounts)}
+✅ الحسابات المفعلة والصالحة: {len(active_accounts)}
 📢 عدد الإعلانات: {len(ads)}
 ⏱ وقت التأخير: {self.publish_delay} ثانية
 ━━━━━━━━━━━━━━━━━━━
