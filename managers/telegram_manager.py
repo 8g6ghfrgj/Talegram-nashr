@@ -1,21 +1,12 @@
 import asyncio
 import logging
 import random
-from concurrent.futures import ThreadPoolExecutor
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError
 
 logger = logging.getLogger(__name__)
-
-
-# =========================
-# TELETHON CREDENTIALS
-# =========================
-
-API_ID = 123456        # ضع api_id الحقيقي من my.telegram.org
-API_HASH = "API_HASH"  # ضع api_hash الحقيقي من my.telegram.org
 
 
 # =========================
@@ -33,10 +24,10 @@ class TelegramBotManager:
         # session_string -> TelegramClient
         self.clients = {}
 
-        # default delay (seconds) - تم تقليلها للسرعة
-        self.publish_delay = 1.0  # ثانية واحدة فقط بين كل رسالة
+        # default delay (seconds)
+        self.publish_delay = 1.0  # ثانية واحدة بين كل رسالة
         
-        # cache للمجموعات (session_string -> list of groups)
+        # cache للمجموعات
         self.groups_cache = {}
         
         # قفل للمزامنة
@@ -44,38 +35,40 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # CLIENT HANDLING
+    # CLIENT HANDLING (بدون API_ID و API_HASH)
     # ==================================================
 
     async def get_client(self, session_string: str) -> TelegramClient:
+        """إنشاء عميل Telethon من StringSession كامل"""
 
         async with self._lock:
             if session_string in self.clients:
                 return self.clients[session_string]
 
+            # إنشاء عميل باستخدام StringSession فقط - لا حاجة لـ API_ID و API_HASH
             client = TelegramClient(
                 StringSession(session_string),
-                API_ID,
-                API_HASH
+                1,  # رقم وهمي - لن يُستخدم لأن StringSession مكتمل
+                "dummy"  # نص وهمي - لن يُستخدم لأن StringSession مكتمل
             )
 
             await client.connect()
 
             if not await client.is_user_authorized():
-                raise RuntimeError("Session not authorized")
+                raise RuntimeError("Session not authorized - الجلسة غير صالحة")
 
             self.clients[session_string] = client
+            logger.info("✅ Client connected successfully")
             return client
 
 
     # ==================================================
-    # FETCH ALL GROUPS FROM ACCOUNT (سريع)
+    # FETCH ALL GROUPS FROM ACCOUNT
     # ==================================================
 
     async def fetch_all_groups(self, session_string: str) -> list:
-        """جلب جميع المجموعات التي فيها الحساب - نسخة سريعة"""
+        """جلب جميع المجموعات التي فيها الحساب"""
         
-        # تحقق من الكاش أولاً
         if session_string in self.groups_cache:
             return self.groups_cache[session_string]
         
@@ -83,8 +76,9 @@ class TelegramBotManager:
             client = await self.get_client(session_string)
             groups = []
             
-            # جلب الدردشات بسرعة
-            async for dialog in client.iter_dialogs(limit=2000):  # حد أقصى 2000 مجموعة
+            logger.info("Fetching all groups from account...")
+            
+            async for dialog in client.iter_dialogs():
                 if dialog.is_group or dialog.is_channel:
                     username = getattr(dialog.entity, "username", None)
                     group_info = {
@@ -96,7 +90,6 @@ class TelegramBotManager:
                     }
                     groups.append(group_info)
             
-            # تخزين في الكاش
             self.groups_cache[session_string] = groups
             logger.info(f"✅ Found {len(groups)} groups in account")
             
@@ -108,11 +101,11 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # SEND MESSAGE TO SINGLE GROUP (مهمة فردية سريعة)
+    # SEND MESSAGE TO SINGLE GROUP
     # ==================================================
 
     async def send_to_group(self, client, target, ad_type, ad_text, ad_media, group_name, account_id):
-        """إرسال رسالة إلى مجموعة واحدة - معالجة سريعة"""
+        """إرسال رسالة إلى مجموعة واحدة"""
         try:
             if ad_type == "text":
                 await client.send_message(target, ad_text)
@@ -133,8 +126,8 @@ class TelegramBotManager:
             return True
             
         except FloodWaitError as e:
-            logger.warning(f"[FLOODWAIT] {e.seconds}s - Account {account_id}")
-            await asyncio.sleep(min(e.seconds, 60))  # انتظر أقل وقت ممكن
+            logger.warning(f"[FLOODWAIT] {e.seconds}s")
+            await asyncio.sleep(min(e.seconds, 60))
             return False
         except Exception as e:
             logger.error(f"[ERROR] {e}")
@@ -142,15 +135,14 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # PUBLISH FROM ONE ACCOUNT (نشر متوازي داخل الحساب الواحد)
+    # PUBLISH FROM ONE ACCOUNT
     # ==================================================
 
     async def publish_from_account(self, acc, ads, admin_id):
-        """نشر من حساب واحد - مع سرعة فائقة"""
+        """نشر من حساب واحد"""
         
         session_string = acc['session']
         
-        # جلب المجموعات
         groups = await self.fetch_all_groups(session_string)
         
         if not groups:
@@ -167,13 +159,11 @@ class TelegramBotManager:
         
         sent_count = 0
         
-        # نشر متوازي: كل إعلان يرسل لكل المجموعات
         for ad in ads:
             ad_type = ad['type']
             ad_text = ad['text'] or ""
             ad_media = ad.get('media_path', None)
             
-            # إنشاء مهام متوازية لجميع المجموعات دفعة واحدة
             tasks = []
             for group in groups:
                 if group['username']:
@@ -187,14 +177,12 @@ class TelegramBotManager:
                 )
                 tasks.append(task)
                 
-                # إذا كان عدد المهام كبير، نطلقها على دفعات
-                if len(tasks) >= 50:  # 50 مجموعة في نفس الوقت
+                if len(tasks) >= 50:
                     results = await asyncio.gather(*tasks)
                     sent_count += sum(results)
                     tasks = []
                     await asyncio.sleep(self.publish_delay)
             
-            # إطلاق المهام المتبقية
             if tasks:
                 results = await asyncio.gather(*tasks)
                 sent_count += sum(results)
@@ -203,7 +191,7 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # MAIN PUBLISH LOOP (نشر فائق السرعة - حسابات متوازية)
+    # MAIN PUBLISH LOOP
     # ==================================================
 
     async def _publish_loop(self, admin_id: int):
@@ -213,13 +201,20 @@ class TelegramBotManager:
         try:
             while True:
 
-                # جلب البيانات
                 accounts = self.db.get_accounts(admin_id)
                 ads = self.db.get_ads(admin_id)
                 
-                # تصفية العناصر النشطة
                 active_accounts = [a for a in accounts if a['active'] == 1]
-                active_ads = [a for a in ads if a.get('active', 1) == 1]
+                active_ads = []
+                for ad in ads:
+                    try:
+                        if 'active' in ad.keys():
+                            if ad['active'] == 1:
+                                active_ads.append(ad)
+                        else:
+                            active_ads.append(ad)
+                    except:
+                        active_ads.append(ad)
                 
                 if not active_accounts:
                     logger.warning("No active accounts")
@@ -233,22 +228,17 @@ class TelegramBotManager:
                 
                 logger.info(f"🚀 Starting parallel publishing with {len(active_accounts)} accounts")
                 
-                # نشر متوازي: كل الحسابات تشتغل في نفس الوقت
                 account_tasks = []
                 for acc in active_accounts:
                     task = self.publish_from_account(acc, active_ads, admin_id)
                     account_tasks.append(task)
                 
-                # انتظار انتهاء جميع الحسابات من النشر
                 results = await asyncio.gather(*account_tasks)
                 total_sent = sum(results)
                 
-                logger.info(f"✅ Cycle completed: {total_sent} messages sent from {len(active_accounts)} accounts")
+                logger.info(f"✅ Cycle completed: {total_sent} messages sent")
                 
-                # مسح الكاش وجلب مجموعات جديدة
                 self.groups_cache.clear()
-                
-                # انتظار قصير قبل الدورة التالية
                 await asyncio.sleep(10)
 
         except asyncio.CancelledError:
@@ -281,11 +271,11 @@ class TelegramBotManager:
 
 
     # ==================================================
-    # TEST PUBLISH (اختبار سريع)
+    # TEST PUBLISH
     # ==================================================
 
     async def test_publish_once(self, update, context):
-        """اختبار سريع - رسالة واحدة لأول 5 مجموعات"""
+        """اختبار سريع"""
         
         admin_id = update.effective_user.id
         accounts = self.db.get_accounts(admin_id)
@@ -295,7 +285,7 @@ class TelegramBotManager:
             await update.message.reply_text("❌ لا يوجد حسابات مفعلة")
             return
         
-        await update.message.reply_text("⚡ جاري الاختبار السريع...")
+        await update.message.reply_text("⚡ جاري الاختبار...")
         
         total_sent = 0
         
@@ -308,18 +298,17 @@ class TelegramBotManager:
             try:
                 client = await self.get_client(acc['session'])
                 
-                # أرسل لأول 5 مجموعات فقط
                 for group in groups[:5]:
                     target = f"@{group['username']}" if group['username'] else group['chat_id']
                     try:
-                        await client.send_message(target, "⚡ اختبار سرعة - البوت يعمل بكفاءة عالية!")
+                        await client.send_message(target, "⚡ اختبار - البوت يعمل بكفاءة!")
                         total_sent += 1
                     except:
                         pass
             except:
                 continue
         
-        await update.message.reply_text(f"✅ تم الإرسال إلى {total_sent} مجموعة بنجاح!")
+        await update.message.reply_text(f"✅ تم الإرسال إلى {total_sent} مجموعة!")
 
 
     # ==================================================
@@ -366,7 +355,7 @@ class TelegramBotManager:
         is_publishing = admin_id in self.publish_tasks
         
         status_text = f"""
-⚡ **حالة البوت - الوضع السريع**
+⚡ **حالة البوت**
 ━━━━━━━━━━━━━━━━━━━
 🚀 النشر: {'✅ شغال' if is_publishing else '⭕ متوقف'}
 👥 الحسابات: {len(accounts)} (مفعل: {len(active_accounts)})
