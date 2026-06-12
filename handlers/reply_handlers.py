@@ -1,37 +1,54 @@
+from typing import Optional
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from menus import show_replies_menu
-
 
 class ReplyHandlers:
-
     def __init__(self, db):
         self.db = db
 
-
     # ==================================================
-    # SHOW ALL REPLIES (PRIVATE + RANDOM)
+    # HELPERS
     # ==================================================
 
-    async def show_replies(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    @staticmethod
+    def _back_keyboard() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 رجوع", callback_data="back_replies")]
+        ])
 
-        query = update.callback_query
-        await query.answer()
+    @staticmethod
+    def _get_reply_value(reply, key: str, index: int, default=None):
+        """
+        يدعم sqlite3.Row أو tuple/list.
+        """
+        try:
+            return reply[key]
+        except Exception:
+            try:
+                return reply[index]
+            except Exception:
+                return default
 
-        admin_id = query.from_user.id
+    @staticmethod
+    def _short_text(text: Optional[str], limit: int = 40) -> str:
+        if not text:
+            return "بدون نص"
 
-        private_replies = self.db.get_private_replies(admin_id)
-        random_replies = self.db.get_random_replies(admin_id)
+        text = text.strip()
 
+        if len(text) <= limit:
+            return text
+
+        return text[:limit] + "..."
+
+    def _build_replies_view(self, private_replies, random_replies):
         if not private_replies and not random_replies:
-            await query.edit_message_text(
+            return (
                 "❌ لا توجد ردود مضافة",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 رجوع", callback_data="back_replies")]
-                ])
+                self._back_keyboard(),
             )
-            return
 
         text = "💬 الردود:\n\n"
         keyboard = []
@@ -39,72 +56,185 @@ class ReplyHandlers:
         # ---------- PRIVATE ----------
         if private_replies:
             text += "🔒 الردود الخاصة:\n"
-            for r in private_replies:
-                r_id, _, r_text, added = r
-                text += f"#{r_id} — {r_text[:40]}\n"
-                text += f"{added}\n\n"
+
+            for reply in private_replies:
+                reply_id = self._get_reply_value(reply, "id", 0)
+                reply_text = self._get_reply_value(reply, "text", 2, "")
+                added_at = self._get_reply_value(reply, "added_at", 3, "")
+
+                text += f"#{reply_id} — {self._short_text(reply_text)}\n"
+
+                if added_at:
+                    text += f"📅 {added_at}\n"
+
+                text += "\n"
 
                 keyboard.append([
                     InlineKeyboardButton(
                         "🗑 حذف (خاص)",
-                        callback_data=f"delete_private_reply_{r_id}"
+                        callback_data=f"delete_private_reply_{reply_id}",
                     )
                 ])
 
         # ---------- RANDOM ----------
         if random_replies:
             text += "🎲 الردود العشوائية:\n"
-            for r in random_replies:
-                r_id, _, r_type, r_text, r_media, added = r
 
-                desc = r_text[:30] if r_text else "بدون نص"
-                media = "🖼️" if r_media else "—"
+            for reply in random_replies:
+                reply_id = self._get_reply_value(reply, "id", 0)
+                reply_type = self._get_reply_value(reply, "type", 2, "unknown")
+                reply_text = self._get_reply_value(reply, "text", 3, "")
+                media_path = self._get_reply_value(reply, "media_path", 4, None)
+                added_at = self._get_reply_value(reply, "added_at", 5, "")
 
-                text += f"#{r_id} — {r_type} | {desc} | {media}\n"
-                text += f"{added}\n\n"
+                desc = self._short_text(reply_text, limit=30)
+                media = "🖼️ صورة" if media_path else "بدون صورة"
+
+                text += f"#{reply_id} — {reply_type} | {desc} | {media}\n"
+
+                if added_at:
+                    text += f"📅 {added_at}\n"
+
+                text += "\n"
 
                 keyboard.append([
                     InlineKeyboardButton(
                         "🗑 حذف (عشوائي)",
-                        callback_data=f"delete_random_reply_{r_id}"
+                        callback_data=f"delete_random_reply_{reply_id}",
                     )
                 ])
 
-        keyboard.append(
-            [InlineKeyboardButton("🔙 رجوع", callback_data="back_replies")]
+        keyboard.append([
+            InlineKeyboardButton("🔙 رجوع", callback_data="back_replies")
+        ])
+
+        return text, InlineKeyboardMarkup(keyboard)
+
+    async def _send_replies_view(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        notice: Optional[str] = None,
+        answer_query: bool = True,
+    ):
+        query = update.callback_query
+
+        if not query:
+            return
+
+        if answer_query:
+            await query.answer()
+
+        admin_id = query.from_user.id
+
+        try:
+            private_replies = self.db.get_private_replies(admin_id)
+            random_replies = self.db.get_random_replies(admin_id)
+        except Exception:
+            await query.edit_message_text(
+                "❌ حدث خطأ أثناء جلب الردود",
+                reply_markup=self._back_keyboard(),
+            )
+            return
+
+        text, reply_markup = self._build_replies_view(
+            private_replies,
+            random_replies,
         )
+
+        if notice:
+            text = f"{notice}\n\n{text}"
 
         await query.edit_message_text(
             text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            reply_markup=reply_markup,
         )
 
+    # ==================================================
+    # SHOW ALL REPLIES
+    # ==================================================
+
+    async def show_replies(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+    ):
+        await self._send_replies_view(
+            update,
+            context,
+            answer_query=True,
+        )
 
     # ==================================================
     # DELETE PRIVATE REPLY
     # ==================================================
 
-    async def delete_private_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE, reply_id: int):
-
+    async def delete_private_reply(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        reply_id: int,
+    ):
         query = update.callback_query
+
+        if not query:
+            return
+
         await query.answer()
 
         admin_id = query.from_user.id
-        self.db.delete_private_reply(reply_id, admin_id)
 
-        await self.show_replies(update, context)
+        try:
+            success = self.db.delete_private_reply(reply_id, admin_id)
+        except Exception:
+            success = False
 
+        notice = (
+            "✅ تم حذف الرد الخاص"
+            if success
+            else "❌ لم يتم العثور على الرد أو لا تملك صلاحية حذفه"
+        )
+
+        await self._send_replies_view(
+            update,
+            context,
+            notice=notice,
+            answer_query=False,
+        )
 
     # ==================================================
     # DELETE RANDOM REPLY
     # ==================================================
 
-    async def delete_random_reply(self, update: Update, context: ContextTypes.DEFAULT_TYPE, reply_id: int):
-
+    async def delete_random_reply(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        reply_id: int,
+    ):
         query = update.callback_query
+
+        if not query:
+            return
+
         await query.answer()
 
         admin_id = query.from_user.id
-        self.db.delete_random_reply(reply_id, admin_id)
 
-        await self.show_replies(update, context)
+        try:
+            success = self.db.delete_random_reply(reply_id, admin_id)
+        except Exception:
+            success = False
+
+        notice = (
+            "✅ تم حذف الرد العشوائي"
+            if success
+            else "❌ لم يتم العثور على الرد أو لا تملك صلاحية حذفه"
+        )
+
+        await self._send_replies_view(
+            update,
+            context,
+            notice=notice,
+            answer_query=False,
+        )
